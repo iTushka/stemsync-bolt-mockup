@@ -1,0 +1,563 @@
+import { useState } from 'react';
+import { X, Mic, Sparkles, Plus, Trash2, Check, Camera, AlertTriangle, Copy, CheckCircle2 } from 'lucide-react';
+import type { StockItem, Category, SalesChannel } from '../types';
+import { CATEGORIES, margin } from '../types';
+import { parseEntry, createDraftFromParsed, type ParsedEntry } from '../parse';
+import { buildAdCopy, copyToClipboard } from '../adCopy';
+import { Sheet } from './Sheet';
+
+interface AddSheetProps {
+  open: boolean;
+  onClose: () => void;
+  onSave: (item: Omit<StockItem, 'id' | 'createdAt'>) => void;
+}
+
+type Draft = Omit<StockItem, 'id' | 'createdAt'>;
+
+const emptyDraft: Draft = {
+  name: '',
+  category: 'Other',
+  quantity: 0,
+  purchasePrice: 0,
+  salePrice: 0,
+  supplier: '',
+  tags: [],
+  environment: '',
+  channels: [],
+  aging: false,
+  soldOut: false,
+};
+
+const CHANNEL_SUGGESTIONS = ['Facebook Marketplace', 'WhatsApp', 'Physical market', 'Instagram'];
+
+export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
+  const [rawText, setRawText] = useState('');
+  const [parsed, setParsed] = useState<ParsedEntry | null>(null);
+  const [showCard, setShowCard] = useState(false);
+  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+  const [addingChannel, setAddingChannel] = useState(false);
+  const [channelInput, setChannelInput] = useState('');
+  const [channelPrice, setChannelPrice] = useState('');
+  const [hintDismissed, setHintDismissed] = useState(false);
+  const [interpreting, setInterpreting] = useState(false);
+  const [savedStep, setSavedStep] = useState(false);
+  const [selectedChannelId, setSelectedChannelId] = useState<string>('general');
+  const [copied, setCopied] = useState(false);
+
+  const reset = () => {
+    setRawText('');
+    setParsed(null);
+    setShowCard(false);
+    setDraft(emptyDraft);
+    setMoreOpen(false);
+    setTagInput('');
+    setAddingChannel(false);
+    setChannelInput('');
+    setChannelPrice('');
+    setHintDismissed(false);
+    setSavedStep(false);
+    setSelectedChannelId('general');
+    setCopied(false);
+  };
+
+  const handleClose = () => {
+    reset();
+    onClose();
+  };
+
+  const handleInterpret = () => {
+    if (!rawText.trim()) return;
+    setInterpreting(true);
+    setTimeout(() => {
+      const result = parseEntry(rawText);
+      setParsed(result);
+      setDraft(createDraftFromParsed(result));
+      setShowCard(true);
+      setInterpreting(false);
+    }, 500);
+  };
+
+  const handleSkipManual = () => {
+    setParsed(null);
+    setDraft({ ...emptyDraft });
+    setShowCard(true);
+  };
+
+  const handleSave = () => {
+    onSave(draft);
+    // Don't close yet — this is the whole point of the feature: logging the
+    // item and getting ready-to-post copy happen in one continuous flow.
+    setSavedStep(true);
+  };
+
+  const handleDone = () => {
+    reset();
+    onClose();
+  };
+
+  const selectedChannel: SalesChannel | undefined =
+    selectedChannelId === 'general' ? undefined : draft.channels.find((c) => c.id === selectedChannelId);
+  const adCopyText = buildAdCopy(draft, selectedChannel);
+
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(adCopyText);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const m = margin(draft.purchasePrice, draft.salePrice);
+
+  const addChannel = () => {
+    if (!channelInput.trim()) return;
+    const newCh: SalesChannel = {
+      id: Math.random().toString(36).slice(2, 9),
+      name: channelInput.trim(),
+      price: channelPrice.trim() ? parseInt(channelPrice) || undefined : undefined,
+    };
+    setDraft({ ...draft, channels: [...draft.channels, newCh] });
+    setChannelInput('');
+    setChannelPrice('');
+    setAddingChannel(false);
+  };
+
+  const cancelAddChannel = () => {
+    setChannelInput('');
+    setChannelPrice('');
+    setAddingChannel(false);
+  };
+
+  const removeChannel = (id: string) => {
+    setDraft({ ...draft, channels: draft.channels.filter((c) => c.id !== id) });
+  };
+
+  return (
+    <Sheet open={open} onClose={handleClose} maxHeight="94vh">
+      <div className="flex items-center justify-between px-5 py-2 shrink-0">
+        <h2 className="text-lg font-bold text-stone-900">Add item</h2>
+        <button onClick={handleClose} className="w-8 h-8 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-100">
+          <X size={20} />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-5 pb-4 no-scrollbar">
+        {/* Step 1: free text */}
+        {!showCard && !savedStep && (
+          <div className="pt-2 animate-fadeIn">
+            <div className="relative">
+              <textarea
+                value={rawText}
+                onChange={(e) => setRawText(e.target.value)}
+                placeholder="Type or speak what you bought — e.g. '40 white roses at 80p each', or just a name"
+                rows={3}
+                className="w-full p-4 pr-12 rounded-2xl bg-white border border-stone-200 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-100 transition resize-none"
+              />
+              <button className="absolute top-3 right-3 w-9 h-9 rounded-full bg-cream-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 active:scale-95 transition" aria-label="Dictate">
+                <Mic size={18} />
+              </button>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={handleInterpret}
+                disabled={!rawText.trim() || interpreting}
+                className="flex-1 h-12 rounded-full bg-accent-500 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-fab hover:bg-accent-600 active:scale-[0.98] transition disabled:opacity-40 disabled:shadow-none"
+              >
+                <Sparkles size={17} />
+                {interpreting ? 'Interpreting…' : 'Interpret'}
+              </button>
+              <button
+                onClick={handleSkipManual}
+                className="h-12 px-4 rounded-full bg-white border border-stone-200 text-sm font-medium text-stone-600 hover:border-stone-300 transition"
+              >
+                Skip, fill in manually
+              </button>
+            </div>
+            {parsed && !parsed.name && !parsed.quantity && (
+              <p className="mt-3 text-xs text-stone-500 text-center">
+                Couldn't parse that automatically — fill in the fields manually below.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Step 2: unified editable card */}
+        {showCard && !savedStep && (
+          <div className="pt-2 animate-fadeIn">
+            {parsed?.name && (
+              <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-accent-50 text-accent-700 text-xs font-medium">
+                <Sparkles size={14} />
+                Parsed from your text — adjust if it's not quite right.
+              </div>
+            )}
+
+            {/* The essentials — always visible */}
+            <div className="bg-white rounded-2xl border border-stone-200 p-4 space-y-3.5">
+              <h3 className="text-xs font-semibold text-stone-400 uppercase tracking-wide">The essentials</h3>
+
+              <Field label="Name">
+                <input
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  placeholder="E.g. White roses"
+                  className="input"
+                />
+              </Field>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Quantity">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={draft.quantity || ''}
+                    onChange={(e) => setDraft({ ...draft, quantity: parseInt(e.target.value) || 0 })}
+                    placeholder="0"
+                    className="input"
+                  />
+                </Field>
+                <Field label="Purchase price (kr/unit)">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={draft.purchasePrice || ''}
+                    onChange={(e) => setDraft({ ...draft, purchasePrice: parseFloat(e.target.value) || 0 })}
+                    placeholder="0"
+                    className="input"
+                  />
+                </Field>
+              </div>
+
+              <Field label="Suggested sale price (kr/unit)">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={draft.salePrice || ''}
+                  onChange={(e) => setDraft({ ...draft, salePrice: parseFloat(e.target.value) || 0 })}
+                  placeholder="0"
+                  className="input"
+                />
+                {draft.salePrice > 0 && draft.purchasePrice >= 0 && (
+                  <p
+                    className={`mt-1.5 text-xs font-medium flex items-center gap-1 ${
+                      m >= 50
+                        ? 'text-emerald-600'
+                        : m >= 30
+                          ? 'text-amber-600'
+                          : 'text-red-600'
+                    }`}
+                  >
+                    {m < 30 && <AlertTriangle size={12} />}
+                    {m}% margin
+                    {m >= 50 ? ' — looks good' : m >= 30 ? ' — a bit thin' : ' — below your usual margin'}
+                  </p>
+                )}
+              </Field>
+
+              {/* More details toggle — inline text link */}
+              <button
+                onClick={() => setMoreOpen((v) => !v)}
+                className="w-full flex items-center justify-center gap-1 pt-1 text-sm font-medium text-accent-600 hover:text-accent-700 transition"
+              >
+                <span>{moreOpen ? '− Fewer details' : '+ More details'}</span>
+              </button>
+            </div>
+
+            {/* Expanded section — inline in the same card */}
+            {moreOpen && (
+              <div className="mt-2 bg-white rounded-2xl border border-stone-200 p-4 space-y-4 animate-fadeIn">
+                <Field label="Category">
+                  <select
+                    value={draft.category}
+                    onChange={(e) => setDraft({ ...draft, category: e.target.value as Category })}
+                    className="input"
+                  >
+                    {CATEGORIES.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </Field>
+
+                <Field label="Supplier">
+                  <input
+                    value={draft.supplier}
+                    onChange={(e) => setDraft({ ...draft, supplier: e.target.value })}
+                    placeholder="E.g. Columbia Road Market"
+                    className="input"
+                  />
+                </Field>
+
+                <Field label="Tags">
+                  <div className="flex flex-wrap gap-1.5 mb-1.5">
+                    {draft.tags.map((t) => (
+                      <span key={t} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-cream-100 text-stone-600 text-xs">
+                        {t}
+                        <button
+                          onClick={() => setDraft({ ...draft, tags: draft.tags.filter((x) => x !== t) })}
+                          className="text-stone-400 hover:text-stone-600"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <input
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
+                        e.preventDefault();
+                        setDraft({ ...draft, tags: [...draft.tags, tagInput.trim()] });
+                        setTagInput('');
+                      }
+                    }}
+                    placeholder="Type a tag + Enter"
+                    className="input"
+                  />
+                </Field>
+
+                <Field label="Image">
+                  <button
+                    onClick={() => {}}
+                    className="w-full aspect-square max-h-32 rounded-xl border-2 border-dashed border-stone-200 flex flex-col items-center justify-center text-stone-400 hover:border-accent-300 hover:text-accent-500 transition"
+                  >
+                    <Camera size={22} />
+                    <span className="text-xs mt-1.5">Upload image</span>
+                  </button>
+                </Field>
+
+                {/* Sales channels — dynamic list */}
+                <div>
+                  <span className="block text-xs font-medium text-stone-500 mb-1.5">Sales channels</span>
+
+                  {/* Hint row — dismissible, once per session */}
+                  {draft.channels.length > 0 && !hintDismissed && (
+                    <div className="mb-2.5 flex items-start gap-2 px-3 py-2 rounded-xl bg-accent-50 text-accent-700 text-xs animate-fadeIn">
+                      <span className="flex-1 leading-snug">
+                        Price can differ per channel — leave the field empty to use the base price everywhere.
+                      </span>
+                      <button
+                        onClick={() => setHintDismissed(true)}
+                        className="text-accent-400 hover:text-accent-600 shrink-0"
+                        aria-label="Dismiss hint"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Empty state */}
+                  {draft.channels.length === 0 && !addingChannel && (
+                    <div className="px-3 py-3 rounded-xl bg-cream-100 border border-stone-200">
+                      <p className="text-xs text-stone-500 mb-2.5 leading-snug">
+                        No channels added yet — the price above applies everywhere until you add one.
+                      </p>
+                      <button
+                        onClick={() => setAddingChannel(true)}
+                        className="inline-flex items-center gap-1 text-sm font-medium text-accent-600 hover:text-accent-700"
+                      >
+                        <Plus size={16} />
+                        Add channel
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Channel list */}
+                  {draft.channels.length > 0 && (
+                    <div className="space-y-1.5">
+                      {draft.channels.map((ch) => {
+                        const hasCustomPrice = ch.price !== undefined && ch.price !== draft.salePrice;
+                        return (
+                          <div
+                            key={ch.id}
+                            className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-cream-100 border border-stone-200"
+                          >
+                            <span className="flex-1 text-sm font-semibold text-stone-800 truncate">{ch.name}</span>
+                            <span className={`text-sm ${hasCustomPrice ? 'font-medium text-stone-700' : 'text-stone-400'}`}>
+                              {hasCustomPrice ? `${ch.price} kr` : 'Same as base price'}
+                            </span>
+                            <button
+                              onClick={() => removeChannel(ch.id)}
+                              className="text-stone-400 hover:text-red-500 transition shrink-0"
+                              aria-label="Remove channel"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Add channel row — inline */}
+                  {addingChannel && (
+                    <div className="mt-2 rounded-xl bg-white border border-accent-300 p-3 animate-fadeIn">
+                      {/* Suggestion chips */}
+                      <div className="flex flex-wrap gap-1.5 mb-2.5">
+                        {CHANNEL_SUGGESTIONS.map((s) => (
+                          <button
+                            key={s}
+                            onClick={() => setChannelInput(s)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium transition active:scale-95 ${
+                              channelInput === s
+                                ? 'bg-accent-500 text-white'
+                                : 'bg-cream-100 text-stone-600 hover:bg-cream-200'
+                            }`}
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex gap-2 items-center">
+                        <input
+                          value={channelInput}
+                          onChange={(e) => setChannelInput(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addChannel())}
+                          placeholder="Channel name"
+                          className="input flex-1"
+                          autoFocus
+                        />
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={channelPrice}
+                          onChange={(e) => setChannelPrice(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addChannel())}
+                          placeholder={draft.salePrice > 0 ? `${draft.salePrice} kr — same` : 'Price'}
+                          className="input w-24"
+                        />
+                        <button
+                          onClick={addChannel}
+                          disabled={!channelInput.trim()}
+                          className="w-10 h-10 rounded-xl bg-accent-500 text-white flex items-center justify-center hover:bg-accent-600 active:scale-95 transition shrink-0 disabled:opacity-40"
+                          aria-label="Confirm channel"
+                        >
+                          <Check size={18} />
+                        </button>
+                        <button
+                          onClick={cancelAddChannel}
+                          className="w-10 h-10 rounded-xl bg-stone-100 text-stone-500 flex items-center justify-center hover:bg-stone-200 active:scale-95 transition shrink-0"
+                          aria-label="Cancel"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                      {draft.salePrice > 0 && (
+                        <p className="mt-1.5 text-xs text-stone-400">
+                          Leave empty to use the base price ({draft.salePrice} kr).
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Add button when channels exist and not adding */}
+                  {draft.channels.length > 0 && !addingChannel && (
+                    <button
+                      onClick={() => setAddingChannel(true)}
+                      className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-accent-600 hover:text-accent-700 transition"
+                    >
+                      <Plus size={16} />
+                      Add channel
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 3: item saved — ready-to-post ad copy, channel-aware */}
+        {savedStep && (
+          <div className="pt-2 animate-fadeIn">
+            <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 text-sm font-medium">
+              <CheckCircle2 size={18} />
+              Added to stock — here's copy ready to post.
+            </div>
+
+            {draft.channels.length > 0 && (
+              <div className="mb-3">
+                <span className="block text-xs font-medium text-stone-500 mb-1.5">Write for</span>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setSelectedChannelId('general')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition active:scale-95 ${
+                      selectedChannelId === 'general'
+                        ? 'bg-accent-500 text-white'
+                        : 'bg-white border border-stone-200 text-stone-600 hover:border-stone-300'
+                    }`}
+                  >
+                    General
+                  </button>
+                  {draft.channels.map((ch) => (
+                    <button
+                      key={ch.id}
+                      onClick={() => setSelectedChannelId(ch.id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition active:scale-95 ${
+                        selectedChannelId === ch.id
+                          ? 'bg-accent-500 text-white'
+                          : 'bg-white border border-stone-200 text-stone-600 hover:border-stone-300'
+                      }`}
+                    >
+                      {ch.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-2xl border border-stone-200 bg-white p-4">
+              <pre className="whitespace-pre-wrap font-sans text-sm text-stone-800 leading-relaxed">
+                {adCopyText}
+              </pre>
+            </div>
+
+            <button
+              onClick={handleCopy}
+              className={`mt-3 w-full h-11 rounded-full text-sm font-semibold flex items-center justify-center gap-2 transition active:scale-[0.98] ${
+                copied
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-white border border-stone-200 text-stone-700 hover:border-accent-300'
+              }`}
+            >
+              {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />}
+              {copied ? 'Copied!' : 'Copy text'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Sticky save / done */}
+      {(showCard || savedStep) && (
+        <div className="shrink-0 px-5 pt-3 pb-5 safe-bottom border-t border-stone-100 bg-cream-50">
+          {savedStep ? (
+            <button
+              onClick={handleDone}
+              className="w-full h-12 rounded-full bg-accent-500 text-white font-semibold text-sm shadow-fab hover:bg-accent-600 active:scale-[0.98] transition"
+            >
+              Done
+            </button>
+          ) : (
+            <button
+              onClick={handleSave}
+              disabled={!draft.name.trim()}
+              className="w-full h-12 rounded-full bg-accent-500 text-white font-semibold text-sm shadow-fab hover:bg-accent-600 active:scale-[0.98] transition disabled:opacity-40 disabled:shadow-none"
+            >
+              Save
+            </button>
+          )}
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <span className="block text-xs font-medium text-stone-500 mb-1">{label}</span>
+      {children}
+    </label>
+  );
+}
