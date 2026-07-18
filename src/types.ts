@@ -58,3 +58,10 @@ export function margin(purchase: number, sale: number): number {
   if (sale <= 0) return 0;
   return Math.round(((sale - purchase) / sale) * 100);
 }
+
+export interface Customer {
+  id: string;
+  name: string;
+  consented: boolean;
+  addedAt: number;
+}

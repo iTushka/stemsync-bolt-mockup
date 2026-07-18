@@ -5,8 +5,10 @@ import { AddSheet } from './components/AddSheet';
 import { BottomNav } from './components/BottomNav';
 import { CheckoutBar } from './components/CheckoutBar';
 import { SellPlaceholder } from './components/SellPlaceholder';
+import { WhatsAppCardSheet } from './components/WhatsAppCardSheet';
+import { AddCustomerSheet } from './components/AddCustomerSheet';
 import { mockItems } from './mockData';
-import { emptyFilters, type StockItem, type Filters } from './types';
+import { emptyFilters, type StockItem, type Filters, type Customer } from './types';
 import { applyFilters, countActiveFilters } from './filterLogic';
 
 const MOCK_ITEM_PRICE = 45;
@@ -19,6 +21,9 @@ function App() {
   const [addOpen, setAddOpen] = useState(false);
   const [tab, setTab] = useState<'stock' | 'sell'>('stock');
   const [mockCartCount, setMockCartCount] = useState(0);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [whatsAppCardOpen, setWhatsAppCardOpen] = useState(false);
+  const [addCustomerOpen, setAddCustomerOpen] = useState(false);
 
   const activeCount = items.filter((i) => !i.soldOut).length;
   const activeFilterCount = countActiveFilters(filters);
@@ -40,6 +45,15 @@ function App() {
     setItems((prev) => [newItem, ...prev]);
   };
 
+  const handleSaveCustomer = (customer: Omit<Customer, 'id' | 'addedAt'>) => {
+    const newCustomer: Customer = {
+      ...customer,
+      id: Math.random().toString(36).slice(2, 9),
+      addedAt: Date.now(),
+    };
+    setCustomers((prev) => [newCustomer, ...prev]);
+  };
+
   return (
     <div className="max-w-[640px] mx-auto min-h-screen bg-cream-50 relative flex flex-col">
       {/* Scrollable content area — bottom padding grows when the checkout bar is also showing,
@@ -53,12 +67,15 @@ function App() {
             onSearch={setSearch}
             onOpenFilters={() => setFilterOpen(true)}
             onAdd={() => setAddOpen(true)}
+            onGetWhatsAppCard={() => setWhatsAppCardOpen(true)}
+            onAddCustomer={() => setAddCustomerOpen(true)}
           />
         ) : (
           <SellPlaceholder
             cartCount={mockCartCount}
             onAddMock={() => setMockCartCount((c) => c + 1)}
             onClear={() => setMockCartCount(0)}
+            customers={customers}
           />
         )}
       </div>
@@ -83,6 +100,15 @@ function App() {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onSave={handleSave}
+      />
+      <WhatsAppCardSheet
+        open={whatsAppCardOpen}
+        onClose={() => setWhatsAppCardOpen(false)}
+      />
+      <AddCustomerSheet
+        open={addCustomerOpen}
+        onClose={() => setAddCustomerOpen(false)}
+        onSave={handleSaveCustomer}
       />
     </div>
   );

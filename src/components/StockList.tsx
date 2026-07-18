@@ -10,6 +10,8 @@ interface StockListProps {
   onSearch: (q: string) => void;
   onOpenFilters: () => void;
   onAdd: () => void;
+  onGetWhatsAppCard: () => void;
+  onAddCustomer: () => void;
 }
 
 export function StockList({
@@ -19,8 +21,30 @@ export function StockList({
   onSearch,
   onOpenFilters,
   onAdd,
+  onGetWhatsAppCard,
+  onAddCustomer,
 }: StockListProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const menuItems = [
+    { label: 'Export', onClick: () => setMenuOpen(false) },
+    { label: 'Import', onClick: () => setMenuOpen(false) },
+    { label: 'Saved weekly lists', onClick: () => setMenuOpen(false) },
+    {
+      label: 'Get my WhatsApp card',
+      onClick: () => {
+        setMenuOpen(false);
+        onGetWhatsAppCard();
+      },
+    },
+    {
+      label: 'Add a customer from WhatsApp',
+      onClick: () => {
+        setMenuOpen(false);
+        onAddCustomer();
+      },
+    },
+  ];
 
   return (
     <div className="relative min-h-screen pb-24">
@@ -44,11 +68,11 @@ export function StockList({
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-11 z-20 w-48 bg-white rounded-2xl shadow-cardHover py-1.5 animate-scaleIn origin-top-right">
-                  {['Export', 'Import', 'Saved weekly lists'].map((label) => (
+                <div className="absolute right-0 top-11 z-20 w-56 bg-white rounded-2xl shadow-cardHover py-1.5 animate-scaleIn origin-top-right">
+                  {menuItems.map(({ label, onClick }) => (
                     <button
                       key={label}
-                      onClick={() => setMenuOpen(false)}
+                      onClick={onClick}
                       className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-cream-100 transition"
                     >
                       {label}
