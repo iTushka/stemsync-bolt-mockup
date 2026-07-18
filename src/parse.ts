@@ -21,6 +21,12 @@ const numberWords: Record<string, number> = {
   eleven: 11, twelve: 12, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, hundred: 100,
 };
 
+// A "price token": an optional currency symbol before or after the number,
+// and an optional per-unit suffix like "pp", "each", "ea", "/pp", "per unit".
+const PRICE_TOKEN =
+  '(?:[£$€]|kr|tk|৳)?\\s*(\\d+(?:[.,]\\d+)?)\\s*(?:[£$€]|kr|tk|৳)?' +
+  '(?:\\s*\\/?\\s*(?:pp|ea|each|piece|pieces|pcs|unit|units|st|p)\\b)?(?:\\s+each\\b)?';
+
 function parseNumberWord(token: string): number | undefined {
   if (/^\d+$/.test(token)) return parseInt(token, 10);
   const lower = token.toLowerCase();
@@ -28,64 +34,92 @@ function parseNumberWord(token: string): number | undefined {
   return undefined;
 }
 
+/** Finds a keyword (e.g. "bought", "sell for") and reads the price token that
+ *  follows it. Returns both the parsed number and the full matched substring
+ *  so the caller can strip it out of the name afterwards. */
+function extractPriceAfterKeyword(
+  text: string,
+  keywordPattern: string
+): { value: number; matchText: string } | undefined {
+  const re = new RegExp(`(${keywordPattern})\\s*(?:at|for)?\\s*${PRICE_TOKEN}`, 'i');
+  const match = text.match(re);
+  if (!match) return undefined;
+  const num = parseFloat(match[2].replace(',', '.'));
+  if (isNaN(num) || num <= 0) return undefined;
+  return { value: Math.round(num * 100) / 100, matchText: match[0] };
+}
+
 export function parseEntry(text: string): ParsedEntry {
   const result: ParsedEntry = {};
-  const cleaned = text.trim().replace(/\s+/g, ' ');
+  let cleaned = text.trim().replace(/\s+/g, ' ');
   if (!cleaned) return result;
 
-  const tokens = cleaned.split(' ');
-
-  const qty = parseNumberWord(tokens[0]);
-  if (qty !== undefined && tokens.length > 1) {
-    result.quantity = qty;
-    tokens.shift();
-  }
-
-  const forMatch = cleaned.match(/(?:at|for)\s+(.+?)\s*(?:each|st\b|kr\b|p\b)/i);
-  if (forMatch) {
-    const priceStr = forMatch[1].replace(/[^\d.,]/g, '').replace(',', '.');
-    const price = parseFloat(priceStr);
-    if (!isNaN(price) && price > 0) {
-      result.purchasePrice = Math.round(price);
+  // --- Quantity ---------------------------------------------------------
+  // Try "bought 20" / "buy 20" first, then "20 pcs/units", then fall back
+  // to a leading number ("20 white roses").
+  let qtyMatch = cleaned.match(/\b(?:bought|buy(?:ing)?|purchase[d]?)\s+(\d+)\b/i);
+  if (!qtyMatch) qtyMatch = cleaned.match(/\b(\d+)\s*(?:pcs|pieces?|units?)\b/i);
+  if (qtyMatch) {
+    result.quantity = parseInt(qtyMatch[1], 10);
+    cleaned = cleaned.replace(qtyMatch[0], ' ').replace(/\s{2,}/g, ' ').trim();
+  } else {
+    const firstToken = cleaned.split(' ')[0];
+    const qty = parseNumberWord(firstToken);
+    if (qty !== undefined && cleaned.split(' ').length > 1) {
+      result.quantity = qty;
+      cleaned = cleaned.replace(firstToken, '').trim();
     }
   }
 
-  const remaining = tokens.join(' ');
-  let name = remaining
-    .replace(/(?:at|for)\s+.+?(?:each|st\b|kr\b|p\b).*/i, '')
-    .replace(/^\d+\s+/, '')
-    .trim();
+  // --- Purchase price (keyword-based only) --------------------------------
+  const purchase = extractPriceAfterKeyword(cleaned, 'bought|cost|paid|buy(?:ing)?|purchase[d]?');
+  if (purchase) {
+    result.purchasePrice = purchase.value;
+    cleaned = cleaned.replace(purchase.matchText, ' ').replace(/\s{2,}/g, ' ').trim();
+  }
 
-  // Explicit sale price, e.g. "sell for 60 kr", "selling at £3", "price 45"
-  const sellMatch = cleaned.match(
-    /(?:sell(?:ing)?\s*(?:for|at)|price[d]?\s*(?:at)?)\s*[£$€]?\s*(\d+(?:[.,]\d+)?)\s*(?:kr|each|st)?/i
+  // --- Sale price (keyword-based) — runs BEFORE the generic at/for fallback
+  // below, so a phrase like "sell for 60 kr" is claimed by "sell" here and
+  // never mistaken for a purchase price by the more generic pattern.
+  const sale = extractPriceAfterKeyword(
+    cleaned,
+    'sell(?:ing)?\\s+price[d]?|sell(?:ing)?|price[d]?|asking|rrp'
   );
-  if (sellMatch) {
-    const price = parseFloat(sellMatch[1].replace(',', '.'));
-    if (!isNaN(price) && price > 0) {
-      result.salePrice = Math.round(price);
-    }
-    name = name.replace(sellMatch[0], '').trim();
+  if (sale) {
+    result.salePrice = sale.value;
+    cleaned = cleaned.replace(sale.matchText, ' ').replace(/\s{2,}/g, ' ').trim();
   }
 
-  // Channels explicitly mentioned in the text, e.g. "on WhatsApp and Instagram"
+  // --- Purchase price fallback: original "40 roses at 80p each" style,
+  // with no explicit keyword — only tried if nothing was found above.
+  if (result.purchasePrice === undefined) {
+    const forMatch = cleaned.match(new RegExp(`(?:at|for)\\s*${PRICE_TOKEN}`, 'i'));
+    if (forMatch) {
+      const price = parseFloat(forMatch[1].replace(',', '.'));
+      if (!isNaN(price) && price > 0) {
+        result.purchasePrice = Math.round(price * 100) / 100;
+        cleaned = cleaned.replace(forMatch[0], ' ').replace(/\s{2,}/g, ' ').trim();
+      }
+    }
+  }
+  // --- Channels -----------------------------------------------------
   const foundChannels: SalesChannel[] = [];
   for (const { pattern, name: channelName } of CHANNEL_KEYWORDS) {
     const match = cleaned.match(pattern);
     if (match && !foundChannels.some((c) => c.name === channelName)) {
-      foundChannels.push({
-        id: Math.random().toString(36).slice(2, 9),
-        name: channelName,
-      });
-      name = name.replace(match[0], '').trim();
+      foundChannels.push({ id: Math.random().toString(36).slice(2, 9), name: channelName });
+      cleaned = cleaned.replace(match[0], ' ').replace(/\s{2,}/g, ' ').trim();
     }
   }
-  if (foundChannels.length > 0) {
-    result.channels = foundChannels;
-  }
+  if (foundChannels.length > 0) result.channels = foundChannels;
 
-  // Tidy up leftover connector words after stripping price/channel phrases
-  name = name.replace(/\s*\b(on|via|and)\b\s*$/i, '').replace(/\s{2,}/g, ' ').trim();
+  // --- Whatever's left over is the name -----------------------------------
+  const name = cleaned
+    .replace(/\b(on|via|and)\b/gi, ' ')
+    .replace(/\s*,\s*(?=$|,)/g, ' ')
+    .replace(/^[\s,.-]+|[\s,.-]+$/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
   if (name) {
     result.name = name.charAt(0).toUpperCase() + name.slice(1);
   }

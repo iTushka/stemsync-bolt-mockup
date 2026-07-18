@@ -28,7 +28,7 @@ const emptyDraft: Draft = {
   soldOut: false,
 };
 
-const CHANNEL_SUGGESTIONS = ['Facebook Marketplace', 'WhatsApp', 'Physical market', 'Instagram'];
+const CHANNEL_SUGGESTIONS = ['Facebook Marketplace', 'Gumtree', 'WhatsApp', 'Physical market', 'Instagram', 'TikTok'];
 
 export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
   const [rawText, setRawText] = useState('');
@@ -216,6 +216,11 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
                     placeholder="0"
                     className="input"
                   />
+                  {parsed && draft.quantity === 0 && (
+                    <p className="mt-1 text-[11px] text-amber-600 leading-snug">
+                      Couldn't find this — try "bought 20" or "20 units"
+                    </p>
+                  )}
                 </Field>
                 <Field label="Purchase price (kr/unit)">
                   <input
@@ -226,6 +231,11 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
                     placeholder="0"
                     className="input"
                   />
+                  {parsed && draft.purchasePrice === 0 && (
+                    <p className="mt-1 text-[11px] text-amber-600 leading-snug">
+                      Couldn't find this — try "bought at 1.50 £/pp"
+                    </p>
+                  )}
                 </Field>
               </div>
 
@@ -504,6 +514,11 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
                     </button>
                   ))}
                 </div>
+                {selectedChannel && /instagram|tiktok/i.test(selectedChannel.name) && (
+                  <p className="mt-1.5 text-[11px] text-stone-400">
+                    Shorter, hashtag-style caption — built for {selectedChannel.name}
+                  </p>
+                )}
               </div>
             )}
 

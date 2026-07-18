@@ -1,21 +1,45 @@
-import type { SalesChannel } from './types';
+import type { SalesChannel, Category } from './types';
 
 interface AdCopyInput {
   name: string;
   quantity: number;
   salePrice: number;
   tags: string[];
+  category?: Category;
+}
+
+type Style = 'general' | 'social';
+
+function styleForChannel(channel?: SalesChannel): Style {
+  if (!channel) return 'general';
+  return /instagram|tiktok/i.test(channel.name) ? 'social' : 'general';
 }
 
 /**
- * Builds ready-to-paste ad copy for a stock item. If a channel is passed, the
- * price shown reflects that channel's own price (falling back to the base
- * sale price when the channel didn't set one) — this is the "channel-aware"
- * piece: the same item can read slightly differently depending on where
- * you're about to post it, without you having to rewrite it by hand.
+ * Builds ready-to-paste ad copy for a stock item — automatically adapting
+ * tone depending on which channel it's for. "General" and marketplace-style
+ * channels (Facebook Marketplace, Gumtree, WhatsApp, physical market) get a
+ * plain, factual listing. Instagram/TikTok get a short, hashtag-forward
+ * caption instead, since that's what actually performs on those platforms —
+ * same underlying data, no rewriting by hand.
  */
 export function buildAdCopy(item: AdCopyInput, channel?: SalesChannel): string {
   const price = channel?.price ?? item.salePrice;
+  const style = styleForChannel(channel);
+
+  const hashtags = [
+    ...(item.category ? [item.category] : []),
+    ...item.tags,
+  ].map((t) => `#${t.replace(/\s+/g, '')}`);
+
+  if (style === 'social') {
+    const lines: string[] = [`✨ ${item.name} ✨`, '', `${price} kr — DM to grab yours! 📩`];
+    if (hashtags.length > 0) {
+      lines.push('', hashtags.join(' '));
+    }
+    return lines.join('\n');
+  }
+
   const lines: string[] = [
     `✨ NEW: ${item.name} ✨`,
     '',
