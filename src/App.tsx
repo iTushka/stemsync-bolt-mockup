@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import { usePersistentState } from './usePersistentState';
+import { DEFAULT_CURRENCY } from './config';
 import { StockList } from './components/StockList';
 import { FilterSheet } from './components/FilterSheet';
 import { AddSheet } from './components/AddSheet';
@@ -12,7 +14,6 @@ import { AddCustomerSheet } from './components/AddCustomerSheet';
 import { SettingsSheet } from './components/SettingsSheet';
 import { QuoteCard } from './components/QuoteCard';
 import { BookingsSheet } from './components/BookingsSheet';
-import { mockItems } from './mockData';
 import {
   emptyFilters,
   defaultSettings,
@@ -30,30 +31,33 @@ import { applyFilters, countActiveFilters } from './filterLogic';
 type Tab = 'stock' | 'sell' | 'offers';
 
 function App() {
-  const [items, setItems] = useState<StockItem[]>(mockItems);
+  const [items, setItems] = usePersistentState<StockItem[]>('items', []);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [filterOpen, setFilterOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('stock');
 
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customers, setCustomers] = usePersistentState<Customer[]>('customers', []);
   const [whatsAppCardOpen, setWhatsAppCardOpen] = useState(false);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
 
-  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
-  const [team, setTeam] = useState<TeamUser[]>([
+  const [settings, setSettings] = usePersistentState<AppSettings>('settings', {
+    ...defaultSettings,
+    currencySymbol: DEFAULT_CURRENCY,
+  });
+  const [team, setTeam] = usePersistentState<TeamUser[]>('team', [
     { id: 'owner', name: 'You', role: 'Owner' },
   ]);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const [bundles, setBundles] = useState<Bundle[]>([]);
+  const [bundles, setBundles] = usePersistentState<Bundle[]>('bundles', []);
   const [bundleBuilderOpen, setBundleBuilderOpen] = useState(false);
 
-  const [cart, setCart] = useState<CartLine[]>([]);
+  const [cart, setCart] = usePersistentState<CartLine[]>('cart', []);
   const [quoteOpen, setQuoteOpen] = useState(false);
 
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookings, setBookings] = usePersistentState<Booking[]>('bookings', []);
   const [bookingsOpen, setBookingsOpen] = useState(false);
 
   const activeCount = items.filter((i) => !i.soldOut).length;

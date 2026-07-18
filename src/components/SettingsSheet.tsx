@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Plus, Trash2, RotateCcw, Download, Upload } from 'lucide-react';
 import { Sheet } from './Sheet';
+import { clearTenantStorage, exportTenantData, importTenantData } from '../usePersistentState';
 import type { AppSettings, TeamUser } from '../types';
 
 interface SettingsSheetProps {
@@ -24,6 +25,21 @@ export function SettingsSheet({
   onTeamChange,
 }: SettingsSheetProps) {
   const [newUserName, setNewUserName] = useState('');
+  const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const ok = await importTenantData(file);
+    if (ok) {
+      window.location.reload();
+    } else {
+      setImportStatus('error');
+      setTimeout(() => setImportStatus('idle'), 3000);
+    }
+  };
 
   const update = (patch: Partial<AppSettings>) => onChange({ ...settings, ...patch });
 
@@ -155,6 +171,56 @@ export function SettingsSheet({
               <Plus size={18} />
             </button>
           </div>
+        </div>
+
+        <div className="pt-2 border-t border-stone-100">
+          <span className="block text-xs font-medium text-stone-500 mb-2">
+            Backup &amp; transfer
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={exportTenantData}
+              className="flex-1 h-10 rounded-full bg-white border border-stone-200 text-xs font-semibold text-stone-700 flex items-center justify-center gap-1.5 active:scale-[0.98] transition"
+            >
+              <Download size={14} /> Export data
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1 h-10 rounded-full bg-white border border-stone-200 text-xs font-semibold text-stone-700 flex items-center justify-center gap-1.5 active:scale-[0.98] transition"
+            >
+              <Upload size={14} /> Import data
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json"
+              onChange={handleImportFile}
+              className="hidden"
+            />
+          </div>
+          {importStatus === 'error' && (
+            <p className="mt-1.5 text-[11px] text-red-500">
+              Couldn't read that file — make sure it's a backup exported from this app.
+            </p>
+          )}
+          <p className="mt-1.5 text-[11px] text-stone-400 leading-snug">
+            Save a backup file to move your stock, bookings and settings to another phone or
+            browser — no account needed.
+          </p>
+        </div>
+
+        <div className="pt-2 border-t border-stone-100">
+          <button
+            onClick={() => {
+              if (confirm('Reset all test data on this device? This cannot be undone.')) {
+                clearTenantStorage();
+                window.location.reload();
+              }
+            }}
+            className="flex items-center gap-1.5 text-xs font-medium text-stone-400 hover:text-red-500 transition"
+          >
+            <RotateCcw size={13} /> Reset all test data on this device
+          </button>
         </div>
       </div>
     </Sheet>
