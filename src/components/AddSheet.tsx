@@ -1,16 +1,23 @@
-import { useState } from 'react';
-import { X, Mic, Sparkles, Plus, Trash2, Check, Camera, AlertTriangle, Copy, CheckCircle2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { X, Mic, Sparkles, Plus, Trash2, Check, Camera, AlertTriangle, Copy, CheckCircle2, ImagePlus } from 'lucide-react';
 import type { StockItem, Category, SalesChannel } from '../types';
-import { CATEGORIES, margin } from '../types';
+import { margin } from '../types';
 import { parseEntry, createDraftFromParsed, type ParsedEntry } from '../parse';
 import { buildAdCopy, copyToClipboard } from '../adCopy';
 import { Sheet } from './Sheet';
+import { UpgradePrompt } from './UpgradePrompt';
+import { AiBadge } from './AiBadge';
+import { CATEGORIES_BY_TENANT, categoryFieldConfig } from '../categoryFieldMap';
+import { TENANT } from '../config';
 
 interface AddSheetProps {
   open: boolean;
   onClose: () => void;
   onSave: (item: Omit<StockItem, 'id' | 'createdAt'>) => void;
+  simulateFreePlan?: boolean;
 }
+
+const FREE_CHANNEL_LIMIT = 1;
 
 type Draft = Omit<StockItem, 'id' | 'createdAt'>;
 
@@ -30,7 +37,7 @@ const emptyDraft: Draft = {
 
 const CHANNEL_SUGGESTIONS = ['Facebook Marketplace', 'Gumtree', 'WhatsApp', 'Physical market', 'Instagram', 'TikTok'];
 
-export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
+export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: AddSheetProps) {
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState<ParsedEntry | null>(null);
   const [showCard, setShowCard] = useState(false);
@@ -38,6 +45,7 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [addingChannel, setAddingChannel] = useState(false);
+  const [showChannelUpgrade, setShowChannelUpgrade] = useState(false);
   const [channelInput, setChannelInput] = useState('');
   const [channelPrice, setChannelPrice] = useState('');
   const [hintDismissed, setHintDismissed] = useState(false);
@@ -45,6 +53,11 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
   const [savedStep, setSavedStep] = useState(false);
   const [selectedChannelId, setSelectedChannelId] = useState<string>('general');
   const [copied, setCopied] = useState(false);
+  const [photoStep, setPhotoStep] = useState(false);
+  const [pendingImageUrl, setPendingImageUrl] = useState<string | undefined>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cardFileInputRef = useRef<HTMLInputElement>(null);
+  const tenantCategories = CATEGORIES_BY_TENANT[TENANT];
 
   const reset = () => {
     setRawText('');
@@ -54,12 +67,15 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
     setMoreOpen(false);
     setTagInput('');
     setAddingChannel(false);
+    setShowChannelUpgrade(false);
     setChannelInput('');
     setChannelPrice('');
     setHintDismissed(false);
     setSavedStep(false);
     setSelectedChannelId('general');
     setCopied(false);
+    setPhotoStep(false);
+    setPendingImageUrl(undefined);
   };
 
   const handleClose = () => {
@@ -83,6 +99,37 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
     setParsed(null);
     setDraft({ ...emptyDraft });
     setShowCard(true);
+  };
+
+  /**
+   * Photo-first entry, modelled on the flow Blocket's AI assistant uses:
+   * photo first, then a category, then category-appropriate fields — rather
+   * than asking the seller to compose a written description before they've
+   * entered anything at all. Picking a category here doesn't require a
+   * vision model; it's a manual chip picker for now, which keeps the win
+   * (no writing required before you see the form) without taking on image
+   * recognition as a dependency. See the Blocket deep-dive notes for why
+   * this ordering matters more than the automation behind it.
+   */
+  const handlePhotoSelected = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPendingImageUrl(typeof reader.result === 'string' ? reader.result : undefined);
+      setPhotoStep(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePickCategoryFromPhoto = (category: Category) => {
+    setParsed(null);
+    setDraft({ ...emptyDraft, category, imageUrl: pendingImageUrl });
+    setPhotoStep(false);
+    setShowCard(true);
+  };
+
+  const handleCancelPhotoStep = () => {
+    setPhotoStep(false);
+    setPendingImageUrl(undefined);
   };
 
   const handleSave = () => {
@@ -145,7 +192,7 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
 
       <div className="flex-1 overflow-y-auto px-5 pb-4 no-scrollbar">
         {/* Step 1: free text */}
-        {!showCard && !savedStep && (
+        {!showCard && !savedStep && !photoStep && (
           <div className="pt-2 animate-fadeIn">
             <div className="relative">
               <textarea
@@ -180,6 +227,61 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
                 Couldn't parse that automatically — fill in the fields manually below.
               </p>
             )}
+
+            <div className="mt-3 flex items-center gap-3">
+              <div className="h-px flex-1 bg-stone-200" />
+              <span className="text-[11px] text-stone-400">or</span>
+              <div className="h-px flex-1 bg-stone-200" />
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handlePhotoSelected(file);
+                e.target.value = '';
+              }}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="mt-3 w-full h-12 rounded-full bg-white border border-stone-200 text-sm font-medium text-stone-600 flex items-center justify-center gap-2 hover:border-accent-300 hover:text-accent-600 transition"
+            >
+              <ImagePlus size={17} />
+              Start from a photo
+            </button>
+          </div>
+        )}
+
+        {/* Step 1b: photo captured — pick a category, no typing required */}
+        {photoStep && !showCard && !savedStep && (
+          <div className="pt-2 animate-fadeIn">
+            {pendingImageUrl && (
+              <div className="w-full aspect-square max-h-48 rounded-2xl overflow-hidden border border-stone-200 mb-4">
+                <img src={pendingImageUrl} alt="" className="w-full h-full object-cover" />
+              </div>
+            )}
+            <p className="text-sm font-medium text-stone-700 mb-3">What kind of item is this?</p>
+            <div className="grid grid-cols-2 gap-2">
+              {tenantCategories.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => handlePickCategoryFromPhoto(c)}
+                  className="h-14 rounded-2xl bg-white border border-stone-200 text-sm font-semibold text-stone-700 hover:border-accent-400 hover:text-accent-600 active:scale-[0.98] transition"
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleCancelPhotoStep}
+              className="mt-4 w-full h-11 rounded-full text-sm font-medium text-stone-500 hover:text-stone-700 transition"
+            >
+              Cancel
+            </button>
           </div>
         )}
 
@@ -187,9 +289,13 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
         {showCard && !savedStep && (
           <div className="pt-2 animate-fadeIn">
             {parsed?.name && (
-              <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-accent-50 text-accent-700 text-xs font-medium">
-                <Sparkles size={14} />
-                Parsed from your text — adjust if it's not quite right.
+              <div className="mb-3">
+                <AiBadge text="Parsed from your text — adjust if it's not quite right." />
+              </div>
+            )}
+            {!parsed && draft.imageUrl && (
+              <div className="mb-3">
+                <AiBadge text="Category set from your photo — the fields below adjust to match it." />
               </div>
             )}
 
@@ -283,10 +389,19 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
                     onChange={(e) => setDraft({ ...draft, category: e.target.value as Category })}
                     className="input"
                   >
-                    {CATEGORIES.map((c) => (
+                    {tenantCategories.map((c) => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
+                </Field>
+
+                <Field label={categoryFieldConfig(draft.category).environmentLabel}>
+                  <input
+                    value={draft.environment ?? ''}
+                    onChange={(e) => setDraft({ ...draft, environment: e.target.value })}
+                    placeholder={categoryFieldConfig(draft.category).environmentPlaceholder}
+                    className="input"
+                  />
                 </Field>
 
                 <Field label="Supplier">
@@ -328,13 +443,45 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
                 </Field>
 
                 <Field label="Image">
-                  <button
-                    onClick={() => {}}
-                    className="w-full aspect-square max-h-32 rounded-xl border-2 border-dashed border-stone-200 flex flex-col items-center justify-center text-stone-400 hover:border-accent-300 hover:text-accent-500 transition"
-                  >
-                    <Camera size={22} />
-                    <span className="text-xs mt-1.5">Upload image</span>
-                  </button>
+                  <input
+                    ref={cardFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          if (typeof reader.result === 'string') {
+                            setDraft((d) => ({ ...d, imageUrl: reader.result as string }));
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                      e.target.value = '';
+                    }}
+                  />
+                  {draft.imageUrl ? (
+                    <button
+                      onClick={() => cardFileInputRef.current?.click()}
+                      className="w-full aspect-square max-h-32 rounded-xl overflow-hidden border border-stone-200 relative group"
+                    >
+                      <img src={draft.imageUrl} alt="" className="w-full h-full object-cover" />
+                      <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center text-white text-xs font-medium opacity-0 group-hover:opacity-100 transition">
+                        Change photo
+                      </span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => cardFileInputRef.current?.click()}
+                      className="w-full aspect-square max-h-32 rounded-xl border-2 border-dashed border-stone-200 flex flex-col items-center justify-center text-stone-400 hover:border-accent-300 hover:text-accent-500 transition"
+                    >
+                      <Camera size={22} />
+                      <span className="text-xs mt-1.5">Upload image</span>
+                    </button>
+                  )}
                 </Field>
 
                 {/* Sales channels — dynamic list */}
@@ -463,14 +610,29 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
                   )}
 
                   {/* Add button when channels exist and not adding */}
-                  {draft.channels.length > 0 && !addingChannel && (
+                  {draft.channels.length > 0 && !addingChannel && !showChannelUpgrade && (
                     <button
-                      onClick={() => setAddingChannel(true)}
+                      onClick={() => {
+                        if (simulateFreePlan && draft.channels.length >= FREE_CHANNEL_LIMIT) {
+                          setShowChannelUpgrade(true);
+                        } else {
+                          setAddingChannel(true);
+                        }
+                      }}
                       className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-accent-600 hover:text-accent-700 transition"
                     >
                       <Plus size={16} />
                       Add channel
                     </button>
+                  )}
+
+                  {showChannelUpgrade && (
+                    <div className="mt-2">
+                      <UpgradePrompt
+                        title="Unlimited channels on the paid plan"
+                        description={`Free includes ${FREE_CHANNEL_LIMIT} channel. Upgrade to add Facebook Marketplace, Instagram, TikTok and more — each with auto-styled ad copy.`}
+                      />
+                    </div>
                   )}
                 </div>
               </div>
@@ -521,6 +683,10 @@ export function AddSheet({ open, onClose, onSave }: AddSheetProps) {
                 )}
               </div>
             )}
+
+            <div className="mb-2">
+              <AiBadge text="AI-drafted caption — edit anything before you post it." />
+            </div>
 
             <div className="rounded-2xl border border-stone-200 bg-white p-4">
               <pre className="whitespace-pre-wrap font-sans text-sm text-stone-800 leading-relaxed">

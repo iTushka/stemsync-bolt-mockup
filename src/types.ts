@@ -3,9 +3,17 @@ export type Category =
   | 'Vegetables'
   | 'Fruit'
   | 'Herbs'
+  | 'Clothing'
+  | 'Fabric'
   | 'Accessories'
   | 'Other';
 
+/**
+ * @deprecated Use CATEGORIES_BY_TENANT from categoryFieldMap.ts instead — a
+ * single shared list is exactly the "hardcoded flower terminology" problem
+ * flagged in the branch GAP-analysis. Kept here (rather than deleted) only
+ * so nothing importing it breaks; new code should not add to this list.
+ */
 export const CATEGORIES: Category[] = [
   'Flowers',
   'Vegetables',
@@ -80,6 +88,7 @@ export interface AppSettings {
   businessName: string;
   contactInfo: string;
   language: string;
+  simulateFreePlan: boolean;
 }
 
 export const defaultSettings: AppSettings = {
@@ -87,6 +96,7 @@ export const defaultSettings: AppSettings = {
   businessName: 'My Shop',
   contactInfo: '',
   language: 'English',
+  simulateFreePlan: false,
 };
 
 export type TeamRole = 'Owner' | 'Staff';

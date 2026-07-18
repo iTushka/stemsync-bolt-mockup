@@ -174,6 +174,33 @@ export function SettingsSheet({
         </div>
 
         <div className="pt-2 border-t border-stone-100">
+          <button
+            onClick={() => update({ simulateFreePlan: !settings.simulateFreePlan })}
+            className="flex w-full items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5"
+          >
+            <div className="text-left">
+              <span className="block text-sm font-medium text-stone-700">
+                Simulate free plan (demo)
+              </span>
+              <span className="block text-[11px] text-stone-400">
+                Shows the upgrade prompts a free-tier user would see
+              </span>
+            </div>
+            <span
+              className={`shrink-0 relative w-9 h-5 rounded-full transition ${
+                settings.simulateFreePlan ? 'bg-accent-500' : 'bg-stone-200'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                  settings.simulateFreePlan ? 'translate-x-[18px]' : 'translate-x-0.5'
+                }`}
+              />
+            </span>
+          </button>
+        </div>
+
+        <div className="pt-2 border-t border-stone-100">
           <span className="block text-xs font-medium text-stone-500 mb-2">
             Backup &amp; transfer
           </span>

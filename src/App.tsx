@@ -225,7 +225,12 @@ function App() {
         items={items}
         onApply={setFilters}
       />
-      <AddSheet open={addOpen} onClose={() => setAddOpen(false)} onSave={handleSave} />
+      <AddSheet
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onSave={handleSave}
+        simulateFreePlan={settings.simulateFreePlan}
+      />
       <WhatsAppCardSheet open={whatsAppCardOpen} onClose={() => setWhatsAppCardOpen(false)} />
       <AddCustomerSheet
         open={addCustomerOpen}
