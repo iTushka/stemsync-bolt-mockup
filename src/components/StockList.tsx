@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MoreHorizontal, Search, SlidersHorizontal, Plus, Clock, Package2 } from 'lucide-react';
+import { MoreHorizontal, Search, SlidersHorizontal, Plus, Clock, Package2, QrCode, Settings as SettingsIcon } from 'lucide-react';
 import type { StockItem } from '../types';
 import { margin } from '../types';
 
@@ -12,6 +12,8 @@ interface StockListProps {
   onAdd: () => void;
   onGetWhatsAppCard: () => void;
   onAddCustomer: () => void;
+  onOpenSettings: () => void;
+  currencySymbol: string;
 }
 
 export function StockList({
@@ -23,24 +25,30 @@ export function StockList({
   onAdd,
   onGetWhatsAppCard,
   onAddCustomer,
+  onOpenSettings,
+  currencySymbol,
 }: StockListProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [qrMenuOpen, setQrMenuOpen] = useState(false);
 
   const menuItems = [
     { label: 'Export', onClick: () => setMenuOpen(false) },
     { label: 'Import', onClick: () => setMenuOpen(false) },
     { label: 'Saved weekly lists', onClick: () => setMenuOpen(false) },
+  ];
+
+  const qrMenuItems = [
     {
-      label: 'Get my WhatsApp card',
+      label: 'Share my card',
       onClick: () => {
-        setMenuOpen(false);
+        setQrMenuOpen(false);
         onGetWhatsAppCard();
       },
     },
     {
-      label: 'Add a customer from WhatsApp',
+      label: 'Add a customer',
       onClick: () => {
-        setMenuOpen(false);
+        setQrMenuOpen(false);
         onAddCustomer();
       },
     },
@@ -57,30 +65,66 @@ export function StockList({
               {activeCount}
             </span>
           </div>
-          <div className="relative">
+          <div className="flex items-center gap-1">
+            <div className="relative">
+              <button
+                onClick={() => setQrMenuOpen((v) => !v)}
+                className="w-9 h-9 rounded-full flex items-center justify-center text-stone-600 hover:bg-stone-200/60 active:scale-95 transition"
+                aria-label="WhatsApp card"
+              >
+                <QrCode size={20} />
+              </button>
+              {qrMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setQrMenuOpen(false)} />
+                  <div className="absolute right-0 top-11 z-20 w-52 bg-white rounded-2xl shadow-cardHover py-1.5 animate-scaleIn origin-top-right">
+                    {qrMenuItems.map(({ label, onClick }) => (
+                      <button
+                        key={label}
+                        onClick={onClick}
+                        className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-cream-100 transition"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
-              onClick={() => setMenuOpen((v) => !v)}
+              onClick={onOpenSettings}
               className="w-9 h-9 rounded-full flex items-center justify-center text-stone-600 hover:bg-stone-200/60 active:scale-95 transition"
-              aria-label="More options"
+              aria-label="Settings"
             >
-              <MoreHorizontal size={22} />
+              <SettingsIcon size={20} />
             </button>
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                <div className="absolute right-0 top-11 z-20 w-56 bg-white rounded-2xl shadow-cardHover py-1.5 animate-scaleIn origin-top-right">
-                  {menuItems.map(({ label, onClick }) => (
-                    <button
-                      key={label}
-                      onClick={onClick}
-                      className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-cream-100 transition"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+
+            <div className="relative">
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                className="w-9 h-9 rounded-full flex items-center justify-center text-stone-600 hover:bg-stone-200/60 active:scale-95 transition"
+                aria-label="More options"
+              >
+                <MoreHorizontal size={22} />
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                  <div className="absolute right-0 top-11 z-20 w-52 bg-white rounded-2xl shadow-cardHover py-1.5 animate-scaleIn origin-top-right">
+                    {menuItems.map(({ label, onClick }) => (
+                      <button
+                        key={label}
+                        onClick={onClick}
+                        className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-cream-100 transition"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -122,7 +166,7 @@ export function StockList({
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {items.map((item) => (
-              <StockCard key={item.id} item={item} />
+              <StockCard key={item.id} item={item} currencySymbol={currencySymbol} />
             ))}
           </div>
         )}
@@ -140,7 +184,7 @@ export function StockList({
   );
 }
 
-function StockCard({ item }: { item: StockItem }) {
+function StockCard({ item, currencySymbol }: { item: StockItem; currencySymbol: string }) {
   const m = margin(item.purchasePrice, item.salePrice);
   return (
     <div className="bg-white rounded-2xl shadow-card overflow-hidden hover:shadow-cardHover transition-shadow">
@@ -180,7 +224,7 @@ function StockCard({ item }: { item: StockItem }) {
             <span className="text-xs text-stone-400 ml-1">pcs</span>
           </div>
           <div className="text-right">
-            <div className="text-sm font-semibold text-stone-900">{item.salePrice} kr</div>
+            <div className="text-sm font-semibold text-stone-900">{item.salePrice} {currencySymbol}</div>
             <div className="text-[10px] text-stone-400">{m}% margin</div>
           </div>
         </div>

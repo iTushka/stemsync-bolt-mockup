@@ -1,14 +1,15 @@
-import { Leaf, ShoppingBag } from 'lucide-react';
+import { Leaf, ShoppingBag, Tag } from 'lucide-react';
 
 interface BottomNavProps {
-  active: 'stock' | 'sell';
-  onChange: (tab: 'stock' | 'sell') => void;
+  active: 'stock' | 'sell' | 'offers';
+  onChange: (tab: 'stock' | 'sell' | 'offers') => void;
   cartCount: number;
 }
 
-const TABS: { id: 'stock' | 'sell'; label: string; icon: typeof Leaf }[] = [
+const TABS: { id: 'stock' | 'sell' | 'offers'; label: string; icon: typeof Leaf }[] = [
   { id: 'stock', label: 'Stock', icon: Leaf },
   { id: 'sell', label: 'Sell', icon: ShoppingBag },
+  { id: 'offers', label: 'Offers', icon: Tag },
 ];
 
 export function BottomNav({ active, onChange, cartCount }: BottomNavProps) {

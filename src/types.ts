@@ -65,3 +65,43 @@ export interface Customer {
   consented: boolean;
   addedAt: number;
 }
+
+export interface Bundle {
+  id: string;
+  name: string;
+  itemIds: string[];
+  bundlePrice: number;
+  onSale: boolean;
+  createdAt: number;
+}
+
+export interface AppSettings {
+  currencySymbol: string;
+  businessName: string;
+  contactInfo: string;
+  language: string;
+}
+
+export const defaultSettings: AppSettings = {
+  currencySymbol: 'kr',
+  businessName: 'My Shop',
+  contactInfo: '',
+  language: 'English',
+};
+
+export type TeamRole = 'Owner' | 'Staff';
+
+export interface TeamUser {
+  id: string;
+  name: string;
+  role: TeamRole;
+}
+
+export interface CartLine {
+  id: string;
+  kind: 'item' | 'bundle';
+  refId: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+}
