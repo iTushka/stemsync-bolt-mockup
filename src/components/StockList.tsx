@@ -13,6 +13,7 @@ interface StockListProps {
   onGetWhatsAppCard: () => void;
   onAddCustomer: () => void;
   onOpenSettings: () => void;
+  onOpenBookings: () => void;
   currencySymbol: string;
 }
 
@@ -26,12 +27,20 @@ export function StockList({
   onGetWhatsAppCard,
   onAddCustomer,
   onOpenSettings,
+  onOpenBookings,
   currencySymbol,
 }: StockListProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [qrMenuOpen, setQrMenuOpen] = useState(false);
 
   const menuItems = [
+    {
+      label: 'Bookings',
+      onClick: () => {
+        setMenuOpen(false);
+        onOpenBookings();
+      },
+    },
     { label: 'Export', onClick: () => setMenuOpen(false) },
     { label: 'Import', onClick: () => setMenuOpen(false) },
     { label: 'Saved weekly lists', onClick: () => setMenuOpen(false) },

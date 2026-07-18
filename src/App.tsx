@@ -11,6 +11,7 @@ import { WhatsAppCardSheet } from './components/WhatsAppCardSheet';
 import { AddCustomerSheet } from './components/AddCustomerSheet';
 import { SettingsSheet } from './components/SettingsSheet';
 import { QuoteCard } from './components/QuoteCard';
+import { BookingsSheet } from './components/BookingsSheet';
 import { mockItems } from './mockData';
 import {
   emptyFilters,
@@ -22,6 +23,7 @@ import {
   type AppSettings,
   type TeamUser,
   type CartLine,
+  type Booking,
 } from './types';
 import { applyFilters, countActiveFilters } from './filterLogic';
 
@@ -50,6 +52,9 @@ function App() {
 
   const [cart, setCart] = useState<CartLine[]>([]);
   const [quoteOpen, setQuoteOpen] = useState(false);
+
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookingsOpen, setBookingsOpen] = useState(false);
 
   const activeCount = items.filter((i) => !i.soldOut).length;
   const activeFilterCount = countActiveFilters(filters);
@@ -124,6 +129,41 @@ function App() {
     setQuoteOpen(false);
   };
 
+  const handleAddBooking = (booking: Omit<Booking, 'id' | 'createdAt' | 'status'>) => {
+    const newBooking: Booking = {
+      ...booking,
+      id: Math.random().toString(36).slice(2, 9),
+      createdAt: Date.now(),
+      status: 'upcoming',
+    };
+    setBookings((prev) => [newBooking, ...prev]);
+  };
+
+  const handleStartVisit = (booking: Booking) => {
+    const item = items.find((i) => i.id === booking.itemId);
+    if (item) {
+      setCart((prev) => {
+        const existing = prev.find((l) => l.kind === 'item' && l.refId === item.id);
+        if (existing) return prev;
+        return [
+          ...prev,
+          {
+            id: Math.random().toString(36).slice(2, 9),
+            kind: 'item' as const,
+            refId: item.id,
+            name: item.name,
+            quantity: 1,
+            unitPrice: item.salePrice,
+          },
+        ];
+      });
+    }
+    setBookings((prev) =>
+      prev.map((b) => (b.id === booking.id ? { ...b, status: 'completed' } : b))
+    );
+    setTab('sell');
+  };
+
   return (
     <div className="max-w-[640px] mx-auto min-h-screen bg-cream-50 relative flex flex-col">
       <div className={`flex-1 overflow-y-auto ${showCheckoutBar ? 'pb-6' : 'pb-2'}`}>
@@ -138,6 +178,7 @@ function App() {
             onGetWhatsAppCard={() => setWhatsAppCardOpen(true)}
             onAddCustomer={() => setAddCustomerOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
+            onOpenBookings={() => setBookingsOpen(true)}
             currencySymbol={settings.currencySymbol}
           />
         )}
@@ -210,6 +251,15 @@ function App() {
         businessName={settings.businessName}
         contactInfo={settings.contactInfo}
         onComplete={handleCompleteSale}
+      />
+      <BookingsSheet
+        open={bookingsOpen}
+        onClose={() => setBookingsOpen(false)}
+        bookings={bookings}
+        items={items}
+        currencySymbol={settings.currencySymbol}
+        onAddBooking={handleAddBooking}
+        onStartVisit={handleStartVisit}
       />
     </div>
   );

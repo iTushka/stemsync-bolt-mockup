@@ -105,3 +105,15 @@ export interface CartLine {
   quantity: number;
   unitPrice: number;
 }
+
+export type BookingStatus = 'upcoming' | 'completed';
+
+export interface Booking {
+  id: string;
+  customerName: string;
+  itemId: string;
+  scheduledAt: string;
+  notes: string;
+  status: BookingStatus;
+  createdAt: number;
+}
