@@ -194,6 +194,9 @@ function App() {
             cart={cart}
             onAdd={handleAddToCart}
             customers={customers}
+            onGetWhatsAppCard={() => setWhatsAppCardOpen(true)}
+            onAddCustomer={() => setAddCustomerOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         )}
         {tab === 'offers' && (
@@ -202,6 +205,9 @@ function App() {
             items={items}
             currencySymbol={settings.currencySymbol}
             onCreate={() => setBundleBuilderOpen(true)}
+            onGetWhatsAppCard={() => setWhatsAppCardOpen(true)}
+            onAddCustomer={() => setAddCustomerOpen(true)}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         )}
       </div>
@@ -230,6 +236,7 @@ function App() {
         onClose={() => setAddOpen(false)}
         onSave={handleSave}
         simulateFreePlan={settings.simulateFreePlan}
+        currencySymbol={settings.currencySymbol}
       />
       <WhatsAppCardSheet open={whatsAppCardOpen} onClose={() => setWhatsAppCardOpen(false)} />
       <AddCustomerSheet

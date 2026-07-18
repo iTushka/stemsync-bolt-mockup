@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Search, ShoppingBag, Tag, Users } from 'lucide-react';
 import type { StockItem, Bundle, CartLine, Customer } from '../types';
+import { HeaderIconButtons } from './HeaderIconButtons';
+import { InsightBar } from './InsightBar';
+import { sellInsights } from '../insights';
 
 interface SellTabProps {
   items: StockItem[];
@@ -9,6 +12,9 @@ interface SellTabProps {
   cart: CartLine[];
   onAdd: (kind: 'item' | 'bundle', refId: string, name: string, unitPrice: number) => void;
   customers: Customer[];
+  onGetWhatsAppCard: () => void;
+  onAddCustomer: () => void;
+  onOpenSettings: () => void;
 }
 
 function cartQtyFor(cart: CartLine[], kind: 'item' | 'bundle', refId: string): number {
@@ -22,7 +28,17 @@ function daysAgo(timestamp: number): string {
   return `${days} days ago`;
 }
 
-export function SellTab({ items, bundles, currencySymbol, cart, onAdd, customers }: SellTabProps) {
+export function SellTab({
+  items,
+  bundles,
+  currencySymbol,
+  cart,
+  onAdd,
+  customers,
+  onGetWhatsAppCard,
+  onAddCustomer,
+  onOpenSettings,
+}: SellTabProps) {
   const [search, setSearch] = useState('');
 
   const sellableItems = useMemo(
@@ -39,7 +55,14 @@ export function SellTab({ items, bundles, currencySymbol, cart, onAdd, customers
   return (
     <div className="min-h-screen pb-24">
       <div className="sticky top-0 z-20 bg-cream-50/95 backdrop-blur-md px-4 pt-4 pb-3">
-        <h1 className="text-2xl font-bold tracking-tight text-stone-900 mb-3">Sell</h1>
+        <div className="flex items-center justify-between mb-3">
+          <h1 className="text-2xl font-bold tracking-tight text-stone-900">Sell</h1>
+          <HeaderIconButtons
+            onGetWhatsAppCard={onGetWhatsAppCard}
+            onAddCustomer={onAddCustomer}
+            onOpenSettings={onOpenSettings}
+          />
+        </div>
         <div className="relative">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
@@ -50,6 +73,8 @@ export function SellTab({ items, bundles, currencySymbol, cart, onAdd, customers
           />
         </div>
       </div>
+
+      <InsightBar chips={sellInsights(items, cart, currencySymbol)} />
 
       <div className="px-4 pt-1">
         {nothingFound ? (

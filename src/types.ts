@@ -1,12 +1,20 @@
 export type Category =
-  | 'Flowers'
-  | 'Vegetables'
-  | 'Fruit'
-  | 'Herbs'
+  | 'Foliage'
+  | 'Flowering'
+  | 'Succulents & Cacti'
+  | 'Palms'
+  | 'Ferns'
+  | 'Trailing & Climbing'
+  | 'Air Plants'
   | 'Clothing'
   | 'Fabric'
   | 'Accessories'
-  | 'Other';
+  | 'Other'
+  /** @deprecated legacy generic-florist categories, kept only for backward type-compatibility */
+  | 'Flowers'
+  | 'Vegetables'
+  | 'Fruit'
+  | 'Herbs';
 
 /**
  * @deprecated Use CATEGORIES_BY_TENANT from categoryFieldMap.ts instead — a

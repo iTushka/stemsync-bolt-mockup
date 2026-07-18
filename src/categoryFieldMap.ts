@@ -17,7 +17,25 @@ import type { TenantId } from './config';
  */
 
 export const CATEGORIES_BY_TENANT: Record<TenantId, Category[]> = {
-  flowertot: ['Flowers', 'Vegetables', 'Fruit', 'Herbs', 'Accessories', 'Other'],
+  // Flowertot Botanicals sells houseplants, not cut flowers or produce — the
+  // original 'Flowers/Vegetables/Fruit/Herbs' list was wrong for this
+  // tenant's actual business, not just generic. This grouping follows the
+  // same genus/type split used by UK houseplant retailers and hobbyist
+  // collections (Hortology's A-Z, RHS, Masterclass's houseplant guide):
+  // foliage vs. flowering vs. succulents/cacti as the three big buckets,
+  // with palms, ferns, trailing/climbing and air plants split out because
+  // each has genuinely different care needs, not just cosmetic grouping.
+  flowertot: [
+    'Foliage',
+    'Flowering',
+    'Succulents & Cacti',
+    'Palms',
+    'Ferns',
+    'Trailing & Climbing',
+    'Air Plants',
+    'Accessories',
+    'Other',
+  ],
   jhums: ['Clothing', 'Fabric', 'Accessories', 'Other'],
 };
 
@@ -35,21 +53,34 @@ const DEFAULT_CONFIG: CategoryFieldConfig = {
 };
 
 const CONFIG_BY_CATEGORY: Partial<Record<Category, CategoryFieldConfig>> = {
-  Flowers: {
+  Foliage: {
     environmentLabel: 'Care conditions',
-    environmentPlaceholder: 'E.g. Cool, 4°C',
+    environmentPlaceholder: 'E.g. Bright indirect light, water weekly',
+    nameHint: 'Genus + common name helps buyers recognise it — e.g. "Monstera deliciosa — Swiss cheese plant"',
   },
-  Vegetables: {
-    environmentLabel: 'Storage conditions',
-    environmentPlaceholder: 'E.g. Cool, dry',
-  },
-  Fruit: {
-    environmentLabel: 'Storage conditions',
-    environmentPlaceholder: 'E.g. Room temperature',
-  },
-  Herbs: {
+  Flowering: {
     environmentLabel: 'Care conditions',
-    environmentPlaceholder: 'E.g. Sunny, humid',
+    environmentPlaceholder: 'E.g. Bright light, feed while in bloom',
+  },
+  'Succulents & Cacti': {
+    environmentLabel: 'Care conditions',
+    environmentPlaceholder: 'E.g. Full sun, water sparingly',
+  },
+  Palms: {
+    environmentLabel: 'Care conditions',
+    environmentPlaceholder: 'E.g. Bright indirect light, likes humidity',
+  },
+  Ferns: {
+    environmentLabel: 'Care conditions',
+    environmentPlaceholder: 'E.g. Shade, keep soil consistently moist',
+  },
+  'Trailing & Climbing': {
+    environmentLabel: 'Care conditions',
+    environmentPlaceholder: 'E.g. Medium light, let soil dry between waterings',
+  },
+  'Air Plants': {
+    environmentLabel: 'Care conditions',
+    environmentPlaceholder: 'E.g. Bright light, mist 2-3x weekly, no soil',
   },
   Clothing: {
     environmentLabel: 'Size range',

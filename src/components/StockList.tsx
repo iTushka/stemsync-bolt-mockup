@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { MoreHorizontal, Search, SlidersHorizontal, Plus, Clock, Package2, QrCode, Settings as SettingsIcon } from 'lucide-react';
+import { Search, SlidersHorizontal, Plus, Clock, Package2 } from 'lucide-react';
 import type { StockItem } from '../types';
 import { margin } from '../types';
+import { HeaderIconButtons } from './HeaderIconButtons';
+import { InsightBar } from './InsightBar';
+import { stockInsights } from '../insights';
 
 interface StockListProps {
   items: StockItem[];
@@ -30,37 +32,11 @@ export function StockList({
   onOpenBookings,
   currencySymbol,
 }: StockListProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [qrMenuOpen, setQrMenuOpen] = useState(false);
-
   const menuItems = [
-    {
-      label: 'Bookings',
-      onClick: () => {
-        setMenuOpen(false);
-        onOpenBookings();
-      },
-    },
-    { label: 'Export', onClick: () => setMenuOpen(false) },
-    { label: 'Import', onClick: () => setMenuOpen(false) },
-    { label: 'Saved weekly lists', onClick: () => setMenuOpen(false) },
-  ];
-
-  const qrMenuItems = [
-    {
-      label: 'Share my card',
-      onClick: () => {
-        setQrMenuOpen(false);
-        onGetWhatsAppCard();
-      },
-    },
-    {
-      label: 'Add a customer',
-      onClick: () => {
-        setQrMenuOpen(false);
-        onAddCustomer();
-      },
-    },
+    { label: 'Bookings', onClick: onOpenBookings },
+    { label: 'Export', onClick: () => {} },
+    { label: 'Import', onClick: () => {} },
+    { label: 'Saved weekly lists', onClick: () => {} },
   ];
 
   return (
@@ -74,69 +50,16 @@ export function StockList({
               {activeCount}
             </span>
           </div>
-          <div className="flex items-center gap-1">
-            <div className="relative">
-              <button
-                onClick={() => setQrMenuOpen((v) => !v)}
-                className="w-9 h-9 rounded-full flex items-center justify-center text-stone-600 hover:bg-stone-200/60 active:scale-95 transition"
-                aria-label="WhatsApp card"
-              >
-                <QrCode size={20} />
-              </button>
-              {qrMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setQrMenuOpen(false)} />
-                  <div className="absolute right-0 top-11 z-20 w-52 bg-white rounded-2xl shadow-cardHover py-1.5 animate-scaleIn origin-top-right">
-                    {qrMenuItems.map(({ label, onClick }) => (
-                      <button
-                        key={label}
-                        onClick={onClick}
-                        className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-cream-100 transition"
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
-            <button
-              onClick={onOpenSettings}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-stone-600 hover:bg-stone-200/60 active:scale-95 transition"
-              aria-label="Settings"
-            >
-              <SettingsIcon size={20} />
-            </button>
-
-            <div className="relative">
-              <button
-                onClick={() => setMenuOpen((v) => !v)}
-                className="w-9 h-9 rounded-full flex items-center justify-center text-stone-600 hover:bg-stone-200/60 active:scale-95 transition"
-                aria-label="More options"
-              >
-                <MoreHorizontal size={22} />
-              </button>
-              {menuOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-                  <div className="absolute right-0 top-11 z-20 w-52 bg-white rounded-2xl shadow-cardHover py-1.5 animate-scaleIn origin-top-right">
-                    {menuItems.map(({ label, onClick }) => (
-                      <button
-                        key={label}
-                        onClick={onClick}
-                        className="w-full text-left px-4 py-2.5 text-sm text-stone-700 hover:bg-cream-100 transition"
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          <HeaderIconButtons
+            onGetWhatsAppCard={onGetWhatsAppCard}
+            onAddCustomer={onAddCustomer}
+            onOpenSettings={onOpenSettings}
+            moreMenuItems={menuItems}
+          />
         </div>
       </div>
+
+      <InsightBar chips={stockInsights(items)} />
 
       {/* Row 2: Search + Filter */}
       <div className="sticky top-[52px] z-10 bg-cream-50/95 backdrop-blur-md px-4 pb-3">

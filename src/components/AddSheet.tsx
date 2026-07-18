@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { X, Mic, Sparkles, Plus, Trash2, Check, Camera, AlertTriangle, Copy, CheckCircle2, ImagePlus } from 'lucide-react';
+import { X, Mic, Sparkles, Plus, Trash2, Check, Camera, AlertTriangle, Copy, CheckCircle2, ImagePlus, Calculator, Layers } from 'lucide-react';
 import type { StockItem, Category, SalesChannel } from '../types';
 import { margin } from '../types';
 import { parseEntry, createDraftFromParsed, type ParsedEntry } from '../parse';
@@ -9,12 +9,24 @@ import { UpgradePrompt } from './UpgradePrompt';
 import { AiBadge } from './AiBadge';
 import { CATEGORIES_BY_TENANT, categoryFieldConfig } from '../categoryFieldMap';
 import { TENANT } from '../config';
+import {
+  totalUnitsFromBatch,
+  unitCostFromBatch,
+  suggestSalePrice,
+  createDefaultTiers,
+  tierQuantityTotal,
+  DEFAULT_MARKUP,
+  MIN_MARKUP,
+  MAX_MARKUP,
+  type QualityTier,
+} from '../batchPricing';
 
 interface AddSheetProps {
   open: boolean;
   onClose: () => void;
   onSave: (item: Omit<StockItem, 'id' | 'createdAt'>) => void;
   simulateFreePlan?: boolean;
+  currencySymbol?: string;
 }
 
 const FREE_CHANNEL_LIMIT = 1;
@@ -37,7 +49,7 @@ const emptyDraft: Draft = {
 
 const CHANNEL_SUGGESTIONS = ['Facebook Marketplace', 'Gumtree', 'WhatsApp', 'Physical market', 'Instagram', 'TikTok'];
 
-export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: AddSheetProps) {
+export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, currencySymbol = 'kr' }: AddSheetProps) {
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState<ParsedEntry | null>(null);
   const [showCard, setShowCard] = useState(false);
@@ -59,6 +71,30 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: Ad
   const cardFileInputRef = useRef<HTMLInputElement>(null);
   const tenantCategories = CATEGORIES_BY_TENANT[TENANT];
 
+  // Batch/tray purchase calculator — see batchPricing.ts. Off by default;
+  // most single-item entries never need it.
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchTotalCost, setBatchTotalCost] = useState('');
+  const [batchTrays, setBatchTrays] = useState('');
+  const [batchPiecesPerTray, setBatchPiecesPerTray] = useState('');
+
+  // Markup-based sale price suggestion. salePriceTouched tracks whether the
+  // seller has typed directly into the sale price field since it was last
+  // auto-filled — once true, changing purchase price or markup stops
+  // silently overwriting what she typed.
+  const [markup, setMarkup] = useState(DEFAULT_MARKUP);
+  const [salePriceTouched, setSalePriceTouched] = useState(false);
+
+  // Quality tiers — for when a batch isn't uniform (small/standard/premium
+  // plants from the same tray, sold at different prices). Only relevant
+  // alongside batchMode; saving with tiers enabled creates one stock item
+  // per tier instead of a single item.
+  const [tiersEnabled, setTiersEnabled] = useState(false);
+  const [tiers, setTiers] = useState<QualityTier[]>([]);
+  const [tierSaveSummary, setTierSaveSummary] = useState<
+    { name: string; quantity: number; salePrice: number }[] | null
+  >(null);
+
   const reset = () => {
     setRawText('');
     setParsed(null);
@@ -76,6 +112,15 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: Ad
     setCopied(false);
     setPhotoStep(false);
     setPendingImageUrl(undefined);
+    setBatchMode(false);
+    setBatchTotalCost('');
+    setBatchTrays('');
+    setBatchPiecesPerTray('');
+    setMarkup(DEFAULT_MARKUP);
+    setSalePriceTouched(false);
+    setTiersEnabled(false);
+    setTiers([]);
+    setTierSaveSummary(null);
   };
 
   const handleClose = () => {
@@ -132,7 +177,84 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: Ad
     setPendingImageUrl(undefined);
   };
 
+  /**
+   * Recomputes quantity + cost/unit whenever any batch input changes, and
+   * re-derives the suggested sale price from the current markup — unless
+   * the seller has already typed her own number into that field. This is
+   * the direct answer to "I count trays, then work out cost per plant by
+   * hand every time": the arithmetic happens automatically, the seller
+   * only enters what she actually knows (total paid, trays, per tray).
+   */
+  const applyBatchCalculation = (totalCost: string, trays: string, piecesPerTray: string) => {
+    const input = {
+      totalCost: parseFloat(totalCost) || 0,
+      trays: parseInt(trays, 10) || 0,
+      piecesPerTray: parseInt(piecesPerTray, 10) || 0,
+    };
+    const units = totalUnitsFromBatch(input);
+    const unitCost = unitCostFromBatch(input);
+    setDraft((d) => ({
+      ...d,
+      quantity: units,
+      purchasePrice: unitCost,
+      salePrice: salePriceTouched ? d.salePrice : suggestSalePrice(unitCost, markup),
+    }));
+    if (tiersEnabled) {
+      setTiers(createDefaultTiers(units));
+    }
+  };
+
+  const handleMarkupChange = (value: number) => {
+    setMarkup(value);
+    if (!salePriceTouched) {
+      setDraft((d) => ({ ...d, salePrice: suggestSalePrice(d.purchasePrice, value) }));
+    }
+  };
+
+  const handleToggleTiers = () => {
+    const next = !tiersEnabled;
+    setTiersEnabled(next);
+    if (next) {
+      setTiers(createDefaultTiers(draft.quantity));
+    }
+  };
+
+  const updateTier = (id: string, patch: Partial<QualityTier>) => {
+    setTiers((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  };
+
+  const removeTier = (id: string) => {
+    setTiers((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const addTier = () => {
+    setTiers((prev) => [
+      ...prev,
+      { id: Math.random().toString(36).slice(2, 9), label: '', quantity: 0, markup: DEFAULT_MARKUP },
+    ]);
+  };
+
   const handleSave = () => {
+    if (tiersEnabled && batchMode) {
+      const validTiers = tiers.filter((t) => t.label.trim() && t.quantity > 0);
+      validTiers.forEach((tier) => {
+        onSave({
+          ...draft,
+          name: `${draft.name} — ${tier.label.trim()}`,
+          quantity: tier.quantity,
+          salePrice: suggestSalePrice(draft.purchasePrice, tier.markup),
+        });
+      });
+      setTierSaveSummary(
+        validTiers.map((tier) => ({
+          name: `${draft.name} — ${tier.label.trim()}`,
+          quantity: tier.quantity,
+          salePrice: suggestSalePrice(draft.purchasePrice, tier.markup),
+        }))
+      );
+      setSavedStep(true);
+      return;
+    }
     onSave(draft);
     // Don't close yet — this is the whole point of the feature: logging the
     // item and getting ready-to-post copy happen in one continuous flow.
@@ -307,10 +429,73 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: Ad
                 <input
                   value={draft.name}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  placeholder="E.g. White roses"
+                  placeholder="E.g. Parlour palm"
                   className="input"
                 />
               </Field>
+
+              {/* Batch/tray purchase toggle */}
+              <button
+                onClick={() => setBatchMode((v) => !v)}
+                className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-accent-600 hover:text-accent-700 transition"
+              >
+                <Calculator size={15} />
+                <span>{batchMode ? '− Bought as a single item instead' : 'Bought as a batch or tray?'}</span>
+              </button>
+
+              {batchMode && (
+                <div className="rounded-xl bg-cream-100 border border-stone-200 p-3 space-y-2.5 animate-fadeIn">
+                  <p className="text-xs text-stone-500 leading-snug">
+                    Enter what you paid in total — the cost per plant is worked out for you.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Field label={`Total cost (${currencySymbol})`}>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={batchTotalCost}
+                        onChange={(e) => {
+                          setBatchTotalCost(e.target.value);
+                          applyBatchCalculation(e.target.value, batchTrays, batchPiecesPerTray);
+                        }}
+                        placeholder="20"
+                        className="input"
+                      />
+                    </Field>
+                    <Field label="Trays">
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={batchTrays}
+                        onChange={(e) => {
+                          setBatchTrays(e.target.value);
+                          applyBatchCalculation(batchTotalCost, e.target.value, batchPiecesPerTray);
+                        }}
+                        placeholder="2"
+                        className="input"
+                      />
+                    </Field>
+                    <Field label="Per tray">
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={batchPiecesPerTray}
+                        onChange={(e) => {
+                          setBatchPiecesPerTray(e.target.value);
+                          applyBatchCalculation(batchTotalCost, batchTrays, e.target.value);
+                        }}
+                        placeholder="6"
+                        className="input"
+                      />
+                    </Field>
+                  </div>
+                  {draft.quantity > 0 && draft.purchasePrice > 0 && (
+                    <AiBadge
+                      text={`${draft.quantity} plants at ${currencySymbol}${draft.purchasePrice.toFixed(2)} each — cost calculated automatically.`}
+                    />
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Quantity">
@@ -321,6 +506,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: Ad
                     onChange={(e) => setDraft({ ...draft, quantity: parseInt(e.target.value) || 0 })}
                     placeholder="0"
                     className="input"
+                    disabled={batchMode}
                   />
                   {parsed && draft.quantity === 0 && (
                     <p className="mt-1 text-[11px] text-amber-600 leading-snug">
@@ -328,14 +514,22 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: Ad
                     </p>
                   )}
                 </Field>
-                <Field label="Purchase price (kr/unit)">
+                <Field label={`Purchase price (${currencySymbol}/unit)`}>
                   <input
                     type="number"
                     inputMode="decimal"
                     value={draft.purchasePrice || ''}
-                    onChange={(e) => setDraft({ ...draft, purchasePrice: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => {
+                      const value = parseFloat(e.target.value) || 0;
+                      setDraft((d) => ({
+                        ...d,
+                        purchasePrice: value,
+                        salePrice: salePriceTouched ? d.salePrice : suggestSalePrice(value, markup),
+                      }));
+                    }}
                     placeholder="0"
                     className="input"
+                    disabled={batchMode}
                   />
                   {parsed && draft.purchasePrice === 0 && (
                     <p className="mt-1 text-[11px] text-amber-600 leading-snug">
@@ -345,31 +539,125 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: Ad
                 </Field>
               </div>
 
-              <Field label="Suggested sale price (kr/unit)">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={draft.salePrice || ''}
-                  onChange={(e) => setDraft({ ...draft, salePrice: parseFloat(e.target.value) || 0 })}
-                  placeholder="0"
-                  className="input"
-                />
-                {draft.salePrice > 0 && draft.purchasePrice >= 0 && (
-                  <p
-                    className={`mt-1.5 text-xs font-medium flex items-center gap-1 ${
-                      m >= 50
-                        ? 'text-emerald-600'
-                        : m >= 30
-                          ? 'text-amber-600'
-                          : 'text-red-600'
-                    }`}
-                  >
-                    {m < 30 && <AlertTriangle size={12} />}
-                    {m}% margin
-                    {m >= 50 ? ' — looks good' : m >= 30 ? ' — a bit thin' : ' — below your usual margin'}
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Markup (× cost)">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step={0.5}
+                    min={MIN_MARKUP}
+                    max={MAX_MARKUP}
+                    value={markup || ''}
+                    onChange={(e) => handleMarkupChange(parseFloat(e.target.value) || 0)}
+                    placeholder="3"
+                    className="input"
+                  />
+                  <p className="mt-1 text-[11px] text-stone-400 leading-snug">
+                    Typical range {MIN_MARKUP}×–{MAX_MARKUP}×
                   </p>
-                )}
-              </Field>
+                </Field>
+                <Field label={`Suggested sale price (${currencySymbol}/unit)`}>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={draft.salePrice || ''}
+                    onChange={(e) => {
+                      setSalePriceTouched(true);
+                      setDraft({ ...draft, salePrice: parseFloat(e.target.value) || 0 });
+                    }}
+                    placeholder="0"
+                    className="input"
+                  />
+                  {draft.salePrice > 0 && draft.purchasePrice >= 0 && (
+                    <p
+                      className={`mt-1.5 text-xs font-medium flex items-center gap-1 ${
+                        m >= 50
+                          ? 'text-emerald-600'
+                          : m >= 30
+                            ? 'text-amber-600'
+                            : 'text-red-600'
+                      }`}
+                    >
+                      {m < 30 && <AlertTriangle size={12} />}
+                      {m}% margin
+                      {m >= 50 ? ' — looks good' : m >= 30 ? ' — a bit thin' : ' — below your usual margin'}
+                    </p>
+                  )}
+                </Field>
+              </div>
+              {!salePriceTouched && draft.salePrice > 0 && (
+                <AiBadge text="Price suggested from your markup — edit it any time." />
+              )}
+
+              {/* Quality tiers — only relevant once buying as a batch */}
+              {batchMode && (
+                <button
+                  onClick={handleToggleTiers}
+                  className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-accent-600 hover:text-accent-700 transition"
+                >
+                  <Layers size={15} />
+                  <span>{tiersEnabled ? '− Sell this batch at one price' : 'Sizes or quality vary in this batch?'}</span>
+                </button>
+              )}
+
+              {batchMode && tiersEnabled && (
+                <div className="rounded-xl bg-cream-100 border border-stone-200 p-3 space-y-2.5 animate-fadeIn">
+                  <p className="text-xs text-stone-500 leading-snug">
+                    Same cost per plant ({currencySymbol}{draft.purchasePrice.toFixed(2)}), different sale prices —
+                    each tier saves as its own stock item.
+                  </p>
+                  {tiers.map((tier) => (
+                    <div key={tier.id} className="flex gap-2 items-start bg-white rounded-lg border border-stone-200 p-2.5">
+                      <input
+                        value={tier.label}
+                        onChange={(e) => updateTier(tier.id, { label: e.target.value })}
+                        placeholder="Label, e.g. Small"
+                        className="input flex-1"
+                      />
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={tier.quantity || ''}
+                        onChange={(e) => updateTier(tier.id, { quantity: parseInt(e.target.value) || 0 })}
+                        placeholder="Qty"
+                        className="input w-16"
+                      />
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step={0.5}
+                        value={tier.markup || ''}
+                        onChange={(e) => updateTier(tier.id, { markup: parseFloat(e.target.value) || 0 })}
+                        placeholder="×"
+                        className="input w-16"
+                      />
+                      <span className="text-xs text-stone-500 pt-2.5 w-16 shrink-0 text-right">
+                        {currencySymbol}{suggestSalePrice(draft.purchasePrice, tier.markup).toFixed(2)}
+                      </span>
+                      <button
+                        onClick={() => removeTier(tier.id)}
+                        className="text-stone-400 hover:text-red-500 transition shrink-0 pt-2"
+                        aria-label="Remove tier"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={addTier}
+                    className="inline-flex items-center gap-1 text-sm font-medium text-accent-600 hover:text-accent-700"
+                  >
+                    <Plus size={16} />
+                    Add tier
+                  </button>
+                  {draft.quantity > 0 && tierQuantityTotal(tiers) !== draft.quantity && (
+                    <p className="text-[11px] text-amber-600 leading-snug flex items-center gap-1">
+                      <AlertTriangle size={12} />
+                      Tiers add up to {tierQuantityTotal(tiers)}, batch has {draft.quantity} — adjust quantities to match.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* More details toggle — inline text link */}
               <button
@@ -532,7 +820,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: Ad
                           >
                             <span className="flex-1 text-sm font-semibold text-stone-800 truncate">{ch.name}</span>
                             <span className={`text-sm ${hasCustomPrice ? 'font-medium text-stone-700' : 'text-stone-400'}`}>
-                              {hasCustomPrice ? `${ch.price} kr` : 'Same as base price'}
+                              {hasCustomPrice ? `${ch.price} ${currencySymbol}` : 'Same as base price'}
                             </span>
                             <button
                               onClick={() => removeChannel(ch.id)}
@@ -582,7 +870,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: Ad
                           value={channelPrice}
                           onChange={(e) => setChannelPrice(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addChannel())}
-                          placeholder={draft.salePrice > 0 ? `${draft.salePrice} kr — same` : 'Price'}
+                          placeholder={draft.salePrice > 0 ? `${draft.salePrice} ${currencySymbol} — same` : 'Price'}
                           className="input w-24"
                         />
                         <button
@@ -603,7 +891,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: Ad
                       </div>
                       {draft.salePrice > 0 && (
                         <p className="mt-1.5 text-xs text-stone-400">
-                          Leave empty to use the base price ({draft.salePrice} kr).
+                          Leave empty to use the base price ({draft.salePrice} {currencySymbol}).
                         </p>
                       )}
                     </div>
@@ -641,7 +929,31 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false }: Ad
         )}
 
         {/* Step 3: item saved — ready-to-post ad copy, channel-aware */}
-        {savedStep && (
+        {savedStep && tierSaveSummary && (
+          <div className="pt-2 animate-fadeIn">
+            <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 text-sm font-medium">
+              <CheckCircle2 size={18} />
+              {tierSaveSummary.length} items added to stock, one per tier.
+            </div>
+            <div className="space-y-1.5">
+              {tierSaveSummary.map((item, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-white border border-stone-200"
+                >
+                  <span className="text-sm font-medium text-stone-800">{item.name}</span>
+                  <span className="text-sm text-stone-500">
+                    {item.quantity} × {currencySymbol}{item.salePrice.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-xs text-stone-400 leading-snug">
+              Ad copy is written per item from the stock list — open each one to generate and copy its text.
+            </p>
+          </div>
+        )}
+        {savedStep && !tierSaveSummary && (
           <div className="pt-2 animate-fadeIn">
             <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-50 text-emerald-700 text-sm font-medium">
               <CheckCircle2 size={18} />
