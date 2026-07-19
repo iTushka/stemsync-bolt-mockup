@@ -1,0 +1,7 @@
+# Cloudflare Pages routing rule. This app is a single-page client-side app
+# with no server-side router — tenant is picked entirely in JS from the
+# URL path (see src/config.ts). Without this rule, a direct visit or a
+# page refresh at /flowertot or /jhums would 404, since there's no actual
+# file at those paths — only index.html exists, and everything after that
+# is decided in the browser.
+/*    /index.html   200
