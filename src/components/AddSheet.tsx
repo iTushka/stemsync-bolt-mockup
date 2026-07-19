@@ -364,6 +364,17 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
                 </button>
               )}
             </div>
+            {!rawText.trim() && (
+              <button
+                onClick={() => setRawText('4 trays, 6 per tray, £25 total')}
+                className="mt-2 text-xs text-stone-400 hover:text-accent-600 transition text-left"
+              >
+                Buying a whole tray? Try:{' '}
+                <span className="underline decoration-dotted">
+                  "4 trays, 6 per tray, £25 total"
+                </span>
+              </button>
+            )}
             <div className="mt-3 flex gap-2">
               <button
                 onClick={handleInterpret}
@@ -483,6 +494,9 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
                 <div className="rounded-xl bg-cream-100 border border-stone-200 p-3 space-y-2.5 animate-fadeIn">
                   <p className="text-xs text-stone-500 leading-snug">
                     Enter what you paid in total — the cost per plant is worked out for you.
+                    <br />
+                    E.g. 2 trays × 6 per tray = 12 plants, {currencySymbol}20 total →{' '}
+                    {currencySymbol}1.67 each.
                   </p>
                   <div className="grid grid-cols-3 gap-2">
                     <Field label={`Total cost (${currencySymbol})`}>
@@ -640,8 +654,17 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
                 <div className="rounded-xl bg-cream-100 border border-stone-200 p-3 space-y-2.5 animate-fadeIn">
                   <p className="text-xs text-stone-500 leading-snug">
                     Same cost per plant ({currencySymbol}{draft.purchasePrice.toFixed(2)}), different sale prices —
-                    each tier saves as its own stock item.
+                    each tier saves as its own stock item. E.g. "Small" / 4 / 2.5× and "Large" / 2 / 4×.
                   </p>
+                  {tiers.length > 0 && (
+                    <div className="flex gap-2 px-2.5 text-[10px] font-medium text-stone-400 uppercase tracking-wide">
+                      <span className="flex-1">Label</span>
+                      <span className="w-16 text-center">Qty</span>
+                      <span className="w-16 text-center">Markup</span>
+                      <span className="w-16 text-right">Price</span>
+                      <span className="w-[15px]" />
+                    </div>
+                  )}
                   {tiers.map((tier) => (
                     <div key={tier.id} className="flex gap-2 items-start bg-white rounded-lg border border-stone-200 p-2.5">
                       <input
