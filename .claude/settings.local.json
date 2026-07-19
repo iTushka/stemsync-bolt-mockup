@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(npx tsx -e ' *)",
-      "Bash(npm install *)",
-      "Bash(npm run *)"
-    ]
-  }
-}
