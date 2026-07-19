@@ -23,7 +23,7 @@ function styleForChannel(channel?: SalesChannel): Style {
  * caption instead, since that's what actually performs on those platforms —
  * same underlying data, no rewriting by hand.
  */
-export function buildAdCopy(item: AdCopyInput, channel?: SalesChannel): string {
+export function buildAdCopy(item: AdCopyInput, channel?: SalesChannel, currencySymbol = 'kr'): string {
   const price = channel?.price ?? item.salePrice;
   const style = styleForChannel(channel);
 
@@ -33,7 +33,7 @@ export function buildAdCopy(item: AdCopyInput, channel?: SalesChannel): string {
   ].map((t) => `#${t.replace(/\s+/g, '')}`);
 
   if (style === 'social') {
-    const lines: string[] = [`✨ ${item.name} ✨`, '', `${price} kr — DM to grab yours! 📩`];
+    const lines: string[] = [`✨ ${item.name} ✨`, '', `${price} ${currencySymbol} — DM to grab yours! 📩`];
     if (hashtags.length > 0) {
       lines.push('', hashtags.join(' '));
     }
@@ -44,7 +44,7 @@ export function buildAdCopy(item: AdCopyInput, channel?: SalesChannel): string {
     `✨ NEW: ${item.name} ✨`,
     '',
     `Available now — ${item.quantity} in stock`,
-    `💰 ${price} kr${channel ? ` · ${channel.name}` : ''}`,
+    `💰 ${price} ${currencySymbol}${channel ? ` · ${channel.name}` : ''}`,
   ];
 
   if (item.tags.length > 0) {

@@ -297,7 +297,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
 
   const selectedChannel: SalesChannel | undefined =
     selectedChannelId === 'general' ? undefined : draft.channels.find((c) => c.id === selectedChannelId);
-  const adCopyText = buildAdCopy(draft, selectedChannel);
+  const adCopyText = buildAdCopy(draft, selectedChannel, currencySymbol);
 
   const handleCopy = async () => {
     const ok = await copyToClipboard(adCopyText);

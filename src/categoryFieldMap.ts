@@ -36,7 +36,18 @@ export const CATEGORIES_BY_TENANT: Record<TenantId, Category[]> = {
     'Accessories',
     'Other',
   ],
-  jhums: ['Clothing', 'Fabric', 'Accessories', 'Other'],
+  // Jhum Fashion sells women's clothing, and Bangladeshi fashion retailers
+  // (Othoba, Triple, RightChoice, Mesmeric Apparel — checked independently,
+  // all agree) consistently split by garment type as the primary category,
+  // not a single generic "Clothing" bucket: three-piece (kameez + salwar/
+  // pant + dupatta) is the single most searched term, followed by
+  // two-piece, saree, and kurti as their own categories. Fabric type
+  // (cotton/georgette/batik/embroidery) is a property WITHIN a garment
+  // listing in every real retailer checked, not a category of its own —
+  // 'Fabric' is kept here only because Jhum Fashion may also sell loose
+  // fabric by the metre (per the original pilot brief); worth confirming
+  // directly with her whether that's still accurate before relying on it.
+  jhums: ['Three-piece', 'Two-piece', 'Saree', 'Kurti', 'Fabric', 'Accessories', 'Other'],
 };
 
 interface CategoryFieldConfig {
@@ -82,10 +93,22 @@ const CONFIG_BY_CATEGORY: Partial<Record<Category, CategoryFieldConfig>> = {
     environmentLabel: 'Care conditions',
     environmentPlaceholder: 'E.g. Bright light, mist 2-3x weekly, no soil',
   },
-  Clothing: {
+  'Three-piece': {
     environmentLabel: 'Size range',
-    environmentPlaceholder: 'E.g. S–XL, or a single size',
-    nameHint: 'Include fabric or style if it helps buyers picture it — e.g. "Cotton shalwar kameez"',
+    environmentPlaceholder: 'E.g. S–XL, or free size',
+    nameHint: 'Fabric or occasion helps buyers picture it — e.g. "Cotton batik three-piece, daily wear"',
+  },
+  'Two-piece': {
+    environmentLabel: 'Size range',
+    environmentPlaceholder: 'E.g. S–XL, or free size',
+  },
+  Saree: {
+    environmentLabel: 'Fabric',
+    environmentPlaceholder: 'E.g. Jamdani, Katan, Georgette',
+  },
+  Kurti: {
+    environmentLabel: 'Size range',
+    environmentPlaceholder: 'E.g. S–XL, or free size',
   },
   Fabric: {
     environmentLabel: 'Width / length available',
@@ -119,7 +142,10 @@ export const CATEGORY_KEYWORDS_BY_TENANT: Record<TenantId, Partial<Record<Catego
     'Air Plants': ['air plant', 'tillandsia'],
   },
   jhums: {
-    Clothing: ['kameez', 'kamiz', 'saree', 'sari', 'salwar', 'shalwar', 'dress', 'shirt', 'panjabi', 'punjabi', 'lehenga', 'kurti'],
-    Fabric: ['fabric', 'cotton', 'georgette', 'silk', 'katan'],
+    'Three-piece': ['থ্রি-পিস', 'থ্রি পিস', 'three-piece', 'three piece', '3 piece', '3-piece', 'salwar kameez', 'shalwar kameez'],
+    'Two-piece': ['টু-পিস', 'টু পিস', 'two-piece', 'two piece', '2 piece', '2-piece'],
+    Saree: ['শাড়ি', 'saree', 'sari', 'jamdani', 'katan'],
+    Kurti: ['কুর্তি', 'kurti', 'kurta'],
+    Fabric: ['fabric', 'cotton', 'georgette', 'silk', 'বাটিক', 'batik'],
   },
 };
