@@ -49,6 +49,29 @@ function extractPriceAfterKeyword(
   return { value: Math.round(num * 100) / 100, matchText: match[0] };
 }
 
+/**
+ * Detects a price explicitly marked as a *total* — "40 in total", "40
+ * total", "total cost 40" — as opposed to a per-unit price. This is the
+ * free-text equivalent of the batch calculator in AddSheet: someone typing
+ * "2 tray baby palms, 12 total, 40 in total" means £40 for all 12 plants,
+ * not £40 each. Without this, the generic "bought/cost/paid" keyword match
+ * below has no way to tell the difference and silently treats the total as
+ * a per-unit price — which is exactly the bug this fixes.
+ */
+function extractTotalPrice(text: string): { value: number; matchText: string } | undefined {
+  const re = new RegExp(
+    `(?:total(?:\\s+cost)?\\s*(?:of|is|was)?\\s*${PRICE_TOKEN}|${PRICE_TOKEN}\\s*(?:in\\s+)?total)`,
+    'i'
+  );
+  const match = text.match(re);
+  if (!match) return undefined;
+  const raw = match[1] ?? match[2];
+  if (!raw) return undefined;
+  const num = parseFloat(raw.replace(',', '.'));
+  if (isNaN(num) || num <= 0) return undefined;
+  return { value: Math.round(num * 100) / 100, matchText: match[0] };
+}
+
 export function parseEntry(text: string): ParsedEntry {
   const result: ParsedEntry = {};
   let cleaned = text.trim().replace(/\s+/g, ' ');
@@ -71,11 +94,27 @@ export function parseEntry(text: string): ParsedEntry {
     }
   }
 
+  // --- Purchase price: "total" phrasing takes priority over per-unit ------
+  // "40 total" means the whole batch, not per plant — divide by quantity if
+  // we already have one, the same arithmetic the batch calculator does.
+  // If quantity isn't known yet, don't guess: leave purchasePrice unset so
+  // the amber "couldn't find this" hint prompts a manual check instead of
+  // silently treating the total as a per-unit price.
+  const totalPrice = extractTotalPrice(cleaned);
+  if (totalPrice) {
+    cleaned = cleaned.replace(totalPrice.matchText, ' ').replace(/\s{2,}/g, ' ').trim();
+    if (result.quantity && result.quantity > 0) {
+      result.purchasePrice = Math.round((totalPrice.value / result.quantity) * 100) / 100;
+    }
+  }
+
   // --- Purchase price (keyword-based only) --------------------------------
-  const purchase = extractPriceAfterKeyword(cleaned, 'bought|cost|paid|buy(?:ing)?|purchase[d]?');
-  if (purchase) {
-    result.purchasePrice = purchase.value;
-    cleaned = cleaned.replace(purchase.matchText, ' ').replace(/\s{2,}/g, ' ').trim();
+  if (result.purchasePrice === undefined) {
+    const purchase = extractPriceAfterKeyword(cleaned, 'bought|cost|paid|buy(?:ing)?|purchase[d]?');
+    if (purchase) {
+      result.purchasePrice = purchase.value;
+      cleaned = cleaned.replace(purchase.matchText, ' ').replace(/\s{2,}/g, ' ').trim();
+    }
   }
 
   // --- Sale price (keyword-based) — runs BEFORE the generic at/for fallback
@@ -115,7 +154,7 @@ export function parseEntry(text: string): ParsedEntry {
 
   // --- Whatever's left over is the name -----------------------------------
   const name = cleaned
-    .replace(/\b(on|via|and)\b/gi, ' ')
+    .replace(/\b(on|via|and|at|for|of)\b/gi, ' ')
     .replace(/\s*,\s*(?=$|,)/g, ' ')
     .replace(/^[\s,.-]+|[\s,.-]+$/g, '')
     .replace(/\s{2,}/g, ' ')

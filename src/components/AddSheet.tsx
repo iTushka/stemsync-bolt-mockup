@@ -211,6 +211,27 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
     }
   };
 
+  /**
+   * Entering batch mode hands control of quantity + purchase price to the
+   * calculator below. Clear both first — otherwise a quantity/price that
+   * free-text parsing already guessed (possibly wrongly, e.g. reading a
+   * total cost as a per-unit price) lingers in the fields and in the
+   * "calculated automatically" badge even though the calculator hasn't
+   * actually computed anything yet.
+   */
+  const handleToggleBatchMode = () => {
+    setBatchMode((v) => {
+      const next = !v;
+      if (next) {
+        setDraft((d) => ({ ...d, quantity: 0, purchasePrice: 0 }));
+        setBatchTotalCost('');
+        setBatchTrays('');
+        setBatchPiecesPerTray('');
+      }
+      return next;
+    });
+  };
+
   const handleToggleTiers = () => {
     const next = !tiersEnabled;
     setTiersEnabled(next);
@@ -436,7 +457,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
 
               {/* Batch/tray purchase toggle */}
               <button
-                onClick={() => setBatchMode((v) => !v)}
+                onClick={handleToggleBatchMode}
                 className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-accent-600 hover:text-accent-700 transition"
               >
                 <Calculator size={15} />
@@ -489,7 +510,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
                       />
                     </Field>
                   </div>
-                  {draft.quantity > 0 && draft.purchasePrice > 0 && (
+                  {batchTotalCost && batchTrays && batchPiecesPerTray && draft.quantity > 0 && draft.purchasePrice > 0 && (
                     <AiBadge
                       text={`${draft.quantity} plants at ${currencySymbol}${draft.purchasePrice.toFixed(2)} each — cost calculated automatically.`}
                     />
