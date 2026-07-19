@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { X, Check, Info, RotateCcw } from 'lucide-react';
 import type { Filters, SortMode, Category, StockItem } from '../types';
-import { CATEGORIES, emptyFilters } from '../types';
+import { emptyFilters } from '../types';
+import { CATEGORIES_BY_TENANT } from '../categoryFieldMap';
+import { TENANT } from '../config';
 import { applyFilters, SORT_OPTIONS } from '../filterLogic';
 import { Sheet } from './Sheet';
 
@@ -83,7 +85,7 @@ export function FilterSheet({ open, onClose, filters, items, onApply }: FilterSh
             >
               All
             </button>
-            {CATEGORIES.map((c) => {
+            {CATEGORIES_BY_TENANT[TENANT].map((c) => {
               const selected = draft.categories.includes(c);
               return (
                 <button

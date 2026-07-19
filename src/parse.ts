@@ -24,8 +24,13 @@ const numberWords: Record<string, number> = {
 
 // A "price token": an optional currency symbol before or after the number,
 // and an optional per-unit suffix like "pp", "each", "ea", "/pp", "per unit".
+// The negative lookahead right after the digits stops this from ever
+// swallowing a still-unconsumed tray count ("4 tray") as if it were a
+// price — without it, "bought 4 tray ..." reads "4" as the purchase price
+// whenever the pieces-per-tray phrase couldn't be found and the batch
+// block above never got a chance to strip "4 tray" out of the text first.
 const PRICE_TOKEN =
-  '(?:[£$€]|kr|tk|৳)?\\s*(\\d+(?:[.,]\\d+)?)\\s*(?:[£$€]|kr|tk|৳)?' +
+  '(?:[£$€]|kr|tk|৳)?\\s*(\\d+(?:[.,]\\d+)?)(?!\\s*trays?\\b)\\s*(?:[£$€]|kr|tk|৳)?' +
   '(?:\\s*\\/?\\s*(?:pp|ea|each|piece|pieces|pcs|unit|units|st|p)\\b)?(?:\\s+each\\b)?';
 
 function parseNumberWord(token: string): number | undefined {
@@ -73,6 +78,24 @@ function extractTotalPrice(text: string): { value: number; matchText: string } |
   return { value: Math.round(num * 100) / 100, matchText: match[0] };
 }
 
+/** "at 80p" / "for 25 £" — a price with no keyword, just a leading
+ *  preposition. Shared by the plain per-unit fallback further down and by
+ *  the tray/batch block, which reuses it to catch a batch total phrased as
+ *  "... for 25 £" rather than "... 25 in total". `perUnit` is true when the
+ *  match itself carries an explicit per-unit marker ("at £2 each") — the
+ *  batch block must NOT treat that as a total to divide by quantity, since
+ *  "each" already says it's per plant, not for the whole tray. */
+function extractAtForPrice(
+  text: string
+): { value: number; matchText: string; perUnit: boolean } | undefined {
+  const match = text.match(new RegExp(`(?:at|for)\\s*${PRICE_TOKEN}`, 'i'));
+  if (!match) return undefined;
+  const num = parseFloat(match[1].replace(',', '.'));
+  if (isNaN(num) || num <= 0) return undefined;
+  const perUnit = /\b(?:pp|ea|each|piece|pieces|pcs|unit|units|st|p)\b/i.test(match[0]);
+  return { value: Math.round(num * 100) / 100, matchText: match[0], perUnit };
+}
+
 /** "4 trays" — the tray count in a batch purchase. Deliberately does NOT
  *  match a bare "4" on its own; it only fires when the word "tray(s)"
  *  is actually there, so it can't be confused with a plain item count. */
@@ -84,16 +107,19 @@ function extractTrayCount(text: string): { value: number; matchText: string } | 
   return { value: num, matchText: match[0] };
 }
 
-/** "6 pieces on each tray", "6 per tray", "6 pcs each tray" — how many
+/** "6 pieces on each tray", "6 per tray", "tray has 6 plants" — how many
  *  individual plants are in a single tray. Deliberately requires an
- *  explicit descriptive word (pieces/pcs/units, or per/each/every) —
- *  without that, a bare "2 tray" would satisfy this just as easily as it
- *  satisfies extractTrayCount, double-counting the same phrase as both
- *  the tray count AND the pieces-per-tray. */
+ *  explicit descriptive word (pieces/pcs/units, or per/each/every, or
+ *  has/have/contains/holds) — without that, a bare "2 tray" would satisfy
+ *  this just as easily as it satisfies extractTrayCount, double-counting
+ *  the same phrase as both the tray count AND the pieces-per-tray. The
+ *  third alternative covers the reversed order ("each tray has 6 plants"),
+ *  which the first two miss since they all expect the count before "tray". */
 function extractPiecesPerTray(text: string): { value: number; matchText: string } | undefined {
   const match =
     text.match(/\b(\d+)\s*(?:pieces?|pcs|units?)\s*(?:on\s+)?(?:each|every|per)\s*tray\b/i) ??
-    text.match(/\b(\d+)\s*(?:per|each|every)\s*tray\b/i);
+    text.match(/\b(\d+)\s*(?:per|each|every)\s*tray\b/i) ??
+    text.match(/\btrays?\s+(?:has|have|contains?|holds?)\s+(\d+)\b/i);
   if (!match) return undefined;
   const num = parseInt(match[1], 10);
   if (isNaN(num) || num <= 0) return undefined;
@@ -126,13 +152,17 @@ export function parseEntry(text: string): ParsedEntry {
       .trim();
 
     const trayTotalPrice = extractTotalPrice(cleaned);
-    if (trayTotalPrice) {
-      cleaned = cleaned.replace(trayTotalPrice.matchText, ' ').replace(/\s{2,}/g, ' ').trim();
-      result.purchasePrice = unitCostFromBatch({
-        totalCost: trayTotalPrice.value,
-        trays: trayCount.value,
-        piecesPerTray: piecesPerTray.value,
-      });
+    const trayAtForPrice = trayTotalPrice ? undefined : extractAtForPrice(cleaned);
+    const trayPrice = trayTotalPrice ?? trayAtForPrice;
+    if (trayPrice) {
+      cleaned = cleaned.replace(trayPrice.matchText, ' ').replace(/\s{2,}/g, ' ').trim();
+      result.purchasePrice = trayAtForPrice?.perUnit
+        ? trayAtForPrice.value
+        : unitCostFromBatch({
+            totalCost: trayPrice.value,
+            trays: trayCount.value,
+            piecesPerTray: piecesPerTray.value,
+          });
     }
   }
 
@@ -205,13 +235,10 @@ export function parseEntry(text: string): ParsedEntry {
   // --- Purchase price fallback: original "40 roses at 80p each" style,
   // with no explicit keyword — only tried if nothing was found above.
   if (result.purchasePrice === undefined) {
-    const forMatch = cleaned.match(new RegExp(`(?:at|for)\\s*${PRICE_TOKEN}`, 'i'));
+    const forMatch = extractAtForPrice(cleaned);
     if (forMatch) {
-      const price = parseFloat(forMatch[1].replace(',', '.'));
-      if (!isNaN(price) && price > 0) {
-        result.purchasePrice = Math.round(price * 100) / 100;
-        cleaned = cleaned.replace(forMatch[0], ' ').replace(/\s{2,}/g, ' ').trim();
-      }
+      result.purchasePrice = forMatch.value;
+      cleaned = cleaned.replace(forMatch.matchText, ' ').replace(/\s{2,}/g, ' ').trim();
     }
   }
   // --- Channels -----------------------------------------------------
