@@ -96,3 +96,30 @@ const CONFIG_BY_CATEGORY: Partial<Record<Category, CategoryFieldConfig>> = {
 export function categoryFieldConfig(category: Category): CategoryFieldConfig {
   return CONFIG_BY_CATEGORY[category] ?? DEFAULT_CONFIG;
 }
+
+/**
+ * Small, deliberately modest keyword lists for a first-pass category guess
+ * from free text — English/romanised terms only. This is NOT meant to be
+ * comprehensive, and especially not for non-Latin-script text (see
+ * categoryLearning.ts for how that's actually handled — a keyword list
+ * this small can never cover Bangla script or every regional term, and a
+ * bigger hardcoded list I can't verify natively would be a false promise
+ * of coverage, not a real fix). This only replaces the old, stale
+ * rose/tulip/tomato keywords that predated the houseplant taxonomy and
+ * never had a jhums entry at all.
+ */
+export const CATEGORY_KEYWORDS_BY_TENANT: Record<TenantId, Partial<Record<Category, string[]>>> = {
+  flowertot: {
+    Foliage: ['monstera', 'pothos', 'snake plant', 'sansevieria', 'philodendron', 'calathea', 'zz plant', 'ivy', 'spider plant'],
+    Flowering: ['orchid', 'peace lily', 'anthurium', 'african violet'],
+    'Succulents & Cacti': ['succulent', 'cactus', 'cacti', 'echeveria', 'aloe'],
+    Palms: ['palm', 'parlour palm', 'areca'],
+    Ferns: ['fern', 'boston fern'],
+    'Trailing & Climbing': ['string of pearls', 'string of hearts', 'trailing'],
+    'Air Plants': ['air plant', 'tillandsia'],
+  },
+  jhums: {
+    Clothing: ['kameez', 'kamiz', 'saree', 'sari', 'salwar', 'shalwar', 'dress', 'shirt', 'panjabi', 'punjabi', 'lehenga', 'kurti'],
+    Fabric: ['fabric', 'cotton', 'georgette', 'silk', 'katan'],
+  },
+};

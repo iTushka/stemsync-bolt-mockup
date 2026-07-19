@@ -8,6 +8,7 @@ import { Sheet } from './Sheet';
 import { UpgradePrompt } from './UpgradePrompt';
 import { AiBadge } from './AiBadge';
 import { CATEGORIES_BY_TENANT, categoryFieldConfig } from '../categoryFieldMap';
+import { recordCategoryCorrection } from '../categoryLearning';
 import { TENANT } from '../config';
 import { useSpeechToText } from '../useSpeechToText';
 import {
@@ -271,6 +272,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
           salePrice: suggestSalePrice(draft.purchasePrice, tier.markup),
         });
       });
+      recordCategoryCorrection(draft.name, draft.category);
       setTierSaveSummary(
         validTiers.map((tier) => ({
           name: `${draft.name} — ${tier.label.trim()}`,
@@ -282,6 +284,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
       return;
     }
     onSave(draft);
+    recordCategoryCorrection(draft.name, draft.category);
     // Don't close yet — this is the whole point of the feature: logging the
     // item and getting ready-to-post copy happen in one continuous flow.
     setSavedStep(true);

@@ -1,5 +1,8 @@
 import type { StockItem, Category, SalesChannel } from './types';
 import { totalUnitsFromBatch, unitCostFromBatch } from './batchPricing';
+import { suggestCategoryFromLearning } from './categoryLearning';
+import { CATEGORY_KEYWORDS_BY_TENANT } from './categoryFieldMap';
+import { TENANT } from './config';
 
 export interface ParsedEntry {
   name?: string;
@@ -269,17 +272,18 @@ export function parseEntry(text: string): ParsedEntry {
   }
 
   if (result.name) {
-    const lower = result.name.toLowerCase();
-    if (lower.includes('rose') || lower.includes('tulip') || lower.includes('eucalyptus') || lower.includes('flower')) {
-      result.category = 'Flowers';
-    } else if (lower.includes('tomato') || lower.includes('lettuce') || lower.includes('onion')) {
-      result.category = 'Vegetables';
-    } else if (lower.includes('apple') || lower.includes('pear') || lower.includes('lemon')) {
-      result.category = 'Fruit';
-    } else if (lower.includes('basil') || lower.includes('mint') || lower.includes('parsley')) {
-      result.category = 'Herbs';
+    const learned = suggestCategoryFromLearning(result.name);
+    if (learned) {
+      result.category = learned;
     } else {
-      result.category = 'Other';
+      const lower = result.name.toLowerCase();
+      const keywordsByCategory = CATEGORY_KEYWORDS_BY_TENANT[TENANT];
+      for (const [category, keywords] of Object.entries(keywordsByCategory) as [Category, string[]][]) {
+        if (keywords.some((keyword) => lower.includes(keyword))) {
+          result.category = category;
+          break;
+        }
+      }
     }
   }
 
