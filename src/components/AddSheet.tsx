@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { X, Mic, Sparkles, Plus, Trash2, Check, Camera, AlertTriangle, Copy, CheckCircle2, ImagePlus, Calculator, Layers } from 'lucide-react';
+import { X, Mic, MicOff, Sparkles, Plus, Trash2, Check, Camera, AlertTriangle, Copy, CheckCircle2, ImagePlus, Calculator, Layers } from 'lucide-react';
 import type { StockItem, Category, SalesChannel } from '../types';
 import { margin } from '../types';
 import { parseEntry, createDraftFromParsed, type ParsedEntry } from '../parse';
@@ -9,6 +9,7 @@ import { UpgradePrompt } from './UpgradePrompt';
 import { AiBadge } from './AiBadge';
 import { CATEGORIES_BY_TENANT, categoryFieldConfig } from '../categoryFieldMap';
 import { TENANT } from '../config';
+import { useSpeechToText } from '../useSpeechToText';
 import {
   totalUnitsFromBatch,
   unitCostFromBatch,
@@ -70,6 +71,10 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cardFileInputRef = useRef<HTMLInputElement>(null);
   const tenantCategories = CATEGORIES_BY_TENANT[TENANT];
+
+  const speech = useSpeechToText((transcript) => {
+    setRawText((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
+  });
 
   // Batch/tray purchase calculator — see batchPricing.ts. Off by default;
   // most single-item entries never need it.
@@ -345,9 +350,19 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
                 rows={3}
                 className="w-full p-4 pr-12 rounded-2xl bg-white border border-stone-200 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-100 transition resize-none"
               />
-              <button className="absolute top-3 right-3 w-9 h-9 rounded-full bg-cream-100 flex items-center justify-center text-stone-500 hover:bg-stone-200 active:scale-95 transition" aria-label="Dictate">
-                <Mic size={18} />
-              </button>
+              {speech.supported && (
+                <button
+                  onClick={() => (speech.listening ? speech.stop() : speech.start())}
+                  className={`absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center transition active:scale-95 ${
+                    speech.listening
+                      ? 'bg-red-500 text-white animate-pulse'
+                      : 'bg-cream-100 text-stone-500 hover:bg-stone-200'
+                  }`}
+                  aria-label={speech.listening ? 'Stop dictating' : 'Dictate'}
+                >
+                  {speech.listening ? <MicOff size={18} /> : <Mic size={18} />}
+                </button>
+              )}
             </div>
             <div className="mt-3 flex gap-2">
               <button

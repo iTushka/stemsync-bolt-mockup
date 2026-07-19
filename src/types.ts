@@ -135,3 +135,28 @@ export interface Booking {
   status: BookingStatus;
   createdAt: number;
 }
+
+/**
+ * A completed sale, logged at checkout. This is the one piece of history
+ * the mockup didn't have — everything else (StockItem, Bundle, Booking) is
+ * "current state", not a timeline. Needed for anything forward-looking:
+ * which channel sales actually come through, and whether a given item is
+ * selling faster or slower than the stock sitting next to it.
+ */
+export interface SaleLine {
+  itemId: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface Sale {
+  id: string;
+  date: number;
+  lines: SaleLine[];
+  total: number;
+  /** Which channel this sale came through, if the seller specified one at
+   *  checkout — optional because not every sale has a clean single channel
+   *  (e.g. a walk-in). Left blank rather than guessed. */
+  channelName?: string;
+}

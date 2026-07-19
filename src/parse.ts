@@ -1,4 +1,5 @@
 import type { StockItem, Category, SalesChannel } from './types';
+import { totalUnitsFromBatch, unitCostFromBatch } from './batchPricing';
 
 export interface ParsedEntry {
   name?: string;
@@ -72,25 +73,94 @@ function extractTotalPrice(text: string): { value: number; matchText: string } |
   return { value: Math.round(num * 100) / 100, matchText: match[0] };
 }
 
+/** "4 trays" — the tray count in a batch purchase. Deliberately does NOT
+ *  match a bare "4" on its own; it only fires when the word "tray(s)"
+ *  is actually there, so it can't be confused with a plain item count. */
+function extractTrayCount(text: string): { value: number; matchText: string } | undefined {
+  const match = text.match(/\b(\d+)\s*trays?\b/i);
+  if (!match) return undefined;
+  const num = parseInt(match[1], 10);
+  if (isNaN(num) || num <= 0) return undefined;
+  return { value: num, matchText: match[0] };
+}
+
+/** "6 pieces on each tray", "6 per tray", "6 pcs each tray" — how many
+ *  individual plants are in a single tray. Deliberately requires an
+ *  explicit descriptive word (pieces/pcs/units, or per/each/every) —
+ *  without that, a bare "2 tray" would satisfy this just as easily as it
+ *  satisfies extractTrayCount, double-counting the same phrase as both
+ *  the tray count AND the pieces-per-tray. */
+function extractPiecesPerTray(text: string): { value: number; matchText: string } | undefined {
+  const match =
+    text.match(/\b(\d+)\s*(?:pieces?|pcs|units?)\s*(?:on\s+)?(?:each|every|per)\s*tray\b/i) ??
+    text.match(/\b(\d+)\s*(?:per|each|every)\s*tray\b/i);
+  if (!match) return undefined;
+  const num = parseInt(match[1], 10);
+  if (isNaN(num) || num <= 0) return undefined;
+  return { value: num, matchText: match[0] };
+}
+
 export function parseEntry(text: string): ParsedEntry {
   const result: ParsedEntry = {};
   let cleaned = text.trim().replace(/\s+/g, ' ');
   if (!cleaned) return result;
 
+  // --- Tray/batch purchase — "4 trays ... 6 pieces each tray ... total
+  // 40£" — the free-text equivalent of the batch calculator in AddSheet.
+  // Runs before the generic quantity/price extraction below, otherwise
+  // "bought 4 trays" gets misread as "quantity: 4" (the tray count, not
+  // the plant count) and the total price gets divided by that instead of
+  // the real number of plants.
+  const trayCount = extractTrayCount(cleaned);
+  const piecesPerTray = extractPiecesPerTray(cleaned);
+  if (trayCount && piecesPerTray) {
+    result.quantity = totalUnitsFromBatch({
+      totalCost: 0,
+      trays: trayCount.value,
+      piecesPerTray: piecesPerTray.value,
+    });
+    cleaned = cleaned
+      .replace(piecesPerTray.matchText, ' ')
+      .replace(trayCount.matchText, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+    const trayTotalPrice = extractTotalPrice(cleaned);
+    if (trayTotalPrice) {
+      cleaned = cleaned.replace(trayTotalPrice.matchText, ' ').replace(/\s{2,}/g, ' ').trim();
+      result.purchasePrice = unitCostFromBatch({
+        totalCost: trayTotalPrice.value,
+        trays: trayCount.value,
+        piecesPerTray: piecesPerTray.value,
+      });
+    }
+  }
+
   // --- Quantity ---------------------------------------------------------
   // Try "bought 20" / "buy 20" first, then "20 pcs/units", then fall back
-  // to a leading number ("20 white roses").
-  let qtyMatch = cleaned.match(/\b(?:bought|buy(?:ing)?|purchase[d]?)\s+(\d+)\b/i);
-  if (!qtyMatch) qtyMatch = cleaned.match(/\b(\d+)\s*(?:pcs|pieces?|units?)\b/i);
-  if (qtyMatch) {
-    result.quantity = parseInt(qtyMatch[1], 10);
-    cleaned = cleaned.replace(qtyMatch[0], ' ').replace(/\s{2,}/g, ' ').trim();
-  } else {
-    const firstToken = cleaned.split(' ')[0];
-    const qty = parseNumberWord(firstToken);
-    if (qty !== undefined && cleaned.split(' ').length > 1) {
-      result.quantity = qty;
-      cleaned = cleaned.replace(firstToken, '').trim();
+  // to a leading number ("20 white roses"). Skipped entirely if the tray
+  // logic above already worked it out — and "bought 4 trays" is excluded
+  // here even on its own, so a tray count is never mistaken for a plain
+  // item count even when pieces-per-tray couldn't be found.
+  if (result.quantity === undefined) {
+    let qtyMatch = cleaned.match(/\b(?:bought|buy(?:ing)?|purchase[d]?)\s+(\d+)\b(?!\s*trays?)/i);
+    if (!qtyMatch) qtyMatch = cleaned.match(/\b(\d+)\s*(?:pcs|pieces?|units?)\b/i);
+    if (qtyMatch) {
+      result.quantity = parseInt(qtyMatch[1], 10);
+      cleaned = cleaned.replace(qtyMatch[0], ' ').replace(/\s{2,}/g, ' ').trim();
+    } else {
+      const tokens = cleaned.split(' ');
+      const firstToken = tokens[0];
+      const nextToken = (tokens[1] ?? '').toLowerCase();
+      const qty = parseNumberWord(firstToken);
+      // "2 tray Baby palm tree" — don't treat the 2 as a plant count just
+      // because pieces-per-tray wasn't found; leave it unset so the amber
+      // hint below prompts a manual check instead of a silently wrong guess.
+      const looksLikeTrayCount = /^trays?[.,;:]?$/.test(nextToken);
+      if (qty !== undefined && tokens.length > 1 && !looksLikeTrayCount) {
+        result.quantity = qty;
+        cleaned = cleaned.replace(firstToken, '').trim();
+      }
     }
   }
 
@@ -99,12 +169,15 @@ export function parseEntry(text: string): ParsedEntry {
   // we already have one, the same arithmetic the batch calculator does.
   // If quantity isn't known yet, don't guess: leave purchasePrice unset so
   // the amber "couldn't find this" hint prompts a manual check instead of
-  // silently treating the total as a per-unit price.
-  const totalPrice = extractTotalPrice(cleaned);
-  if (totalPrice) {
-    cleaned = cleaned.replace(totalPrice.matchText, ' ').replace(/\s{2,}/g, ' ').trim();
-    if (result.quantity && result.quantity > 0) {
-      result.purchasePrice = Math.round((totalPrice.value / result.quantity) * 100) / 100;
+  // silently treating the total as a per-unit price. Skipped if the tray
+  // logic above already found and consumed a total price.
+  if (result.purchasePrice === undefined) {
+    const totalPrice = extractTotalPrice(cleaned);
+    if (totalPrice) {
+      cleaned = cleaned.replace(totalPrice.matchText, ' ').replace(/\s{2,}/g, ' ').trim();
+      if (result.quantity && result.quantity > 0) {
+        result.purchasePrice = Math.round((totalPrice.value / result.quantity) * 100) / 100;
+      }
     }
   }
 

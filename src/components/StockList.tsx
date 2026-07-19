@@ -1,5 +1,5 @@
 import { Search, SlidersHorizontal, Plus, Clock, Package2 } from 'lucide-react';
-import type { StockItem } from '../types';
+import type { StockItem, Sale } from '../types';
 import { margin } from '../types';
 import { HeaderIconButtons } from './HeaderIconButtons';
 import { InsightBar } from './InsightBar';
@@ -7,6 +7,10 @@ import { stockInsights } from '../insights';
 
 interface StockListProps {
   items: StockItem[];
+  /** Unfiltered item list — insights are computed on the whole business,
+   *  not just whatever the seller's currently searching or filtering. */
+  allItems: StockItem[];
+  sales: Sale[];
   activeCount: number;
   activeFilterCount: number;
   onSearch: (q: string) => void;
@@ -21,6 +25,8 @@ interface StockListProps {
 
 export function StockList({
   items,
+  allItems,
+  sales,
   activeCount,
   activeFilterCount,
   onSearch,
@@ -59,7 +65,7 @@ export function StockList({
         </div>
       </div>
 
-      <InsightBar chips={stockInsights(items)} />
+      <InsightBar chips={stockInsights(allItems, sales)} />
 
       {/* Row 2: Search + Filter */}
       <div className="sticky top-[52px] z-10 bg-cream-50/95 backdrop-blur-md px-4 pb-3">

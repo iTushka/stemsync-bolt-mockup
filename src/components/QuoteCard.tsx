@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Printer, Share2, MessageCircle } from 'lucide-react';
 import { Sheet } from './Sheet';
 import type { CartLine } from '../types';
@@ -10,7 +10,11 @@ interface QuoteCardProps {
   currencySymbol: string;
   businessName: string;
   contactInfo: string;
-  onComplete: () => void;
+  /** Channels the items in this cart are already listed on — offered as
+   *  quick picks so recording where a sale came from costs one tap, not
+   *  typing. Optional: leaving it unset is a valid, tracked choice. */
+  channelOptions: string[];
+  onComplete: (channelName?: string) => void;
 }
 
 function orderNumber(): string {
@@ -26,14 +30,20 @@ export function QuoteCard({
   currencySymbol,
   businessName,
   contactInfo,
+  channelOptions,
   onComplete,
 }: QuoteCardProps) {
   const [discount, setDiscount] = useState('');
+  const [selectedChannel, setSelectedChannel] = useState<string | undefined>(undefined);
   const orderNo = useMemo(() => orderNumber(), [open]);
   const dateLabel = useMemo(
     () => new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }),
     [open]
   );
+
+  useEffect(() => {
+    if (open) setSelectedChannel(undefined);
+  }, [open]);
 
   const subtotal = cart.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
   const discountAmount = Math.min(subtotal, Math.max(0, parseFloat(discount) || 0));
@@ -135,6 +145,32 @@ export function QuoteCard({
           />
         </label>
 
+        {channelOptions.length > 0 && (
+          <div className="mt-4">
+            <span className="block text-xs font-medium text-stone-500 mb-1.5">
+              Sold via (optional)
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {channelOptions.map((name) => (
+                <button
+                  key={name}
+                  onClick={() => setSelectedChannel((c) => (c === name ? undefined : name))}
+                  className={`h-8 px-3 rounded-full text-xs font-medium border transition ${
+                    selectedChannel === name
+                      ? 'bg-accent-500 border-accent-500 text-white'
+                      : 'bg-white border-stone-200 text-stone-600 hover:border-accent-300'
+                  }`}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[11px] text-stone-400 leading-snug">
+              Helps flag if you're becoming too dependent on one channel — visible in your Stock tab signals.
+            </p>
+          </div>
+        )}
+
         <div className="mt-4 flex gap-2">
           <button
             onClick={handlePrint}
@@ -159,7 +195,7 @@ export function QuoteCard({
 
       <div className="shrink-0 px-5 pt-3 pb-5 safe-bottom border-t border-stone-100 bg-cream-50">
         <button
-          onClick={onComplete}
+          onClick={() => onComplete(selectedChannel)}
           disabled={cart.length === 0}
           className="w-full h-12 rounded-full bg-accent-500 text-white font-semibold text-sm shadow-fab hover:bg-accent-600 active:scale-[0.98] transition disabled:opacity-40 disabled:shadow-none"
         >

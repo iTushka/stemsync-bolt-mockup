@@ -25,6 +25,7 @@ import {
   type TeamUser,
   type CartLine,
   type Booking,
+  type Sale,
 } from './types';
 import { applyFilters, countActiveFilters } from './filterLogic';
 
@@ -59,6 +60,17 @@ function App() {
 
   const [bookings, setBookings] = usePersistentState<Booking[]>('bookings', []);
   const [bookingsOpen, setBookingsOpen] = useState(false);
+  const [sales, setSales] = usePersistentState<Sale[]>('sales', []);
+
+  const cartChannelOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const line of cart) {
+      if (line.kind !== 'item') continue;
+      const item = items.find((i) => i.id === line.refId);
+      item?.channels.forEach((c) => names.add(c.name));
+    }
+    return Array.from(names);
+  }, [cart, items]);
 
   const activeCount = items.filter((i) => !i.soldOut).length;
   const activeFilterCount = countActiveFilters(filters);
@@ -120,7 +132,22 @@ function App() {
     });
   };
 
-  const handleCompleteSale = () => {
+  const handleCompleteSale = (channelName?: string) => {
+    const total = cart.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
+    const newSale: Sale = {
+      id: Math.random().toString(36).slice(2, 9),
+      date: Date.now(),
+      lines: cart.map((l) => ({
+        itemId: l.refId,
+        name: l.name,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+      })),
+      total,
+      channelName: channelName?.trim() || undefined,
+    };
+    setSales((prev) => [newSale, ...prev]);
+
     setItems((prev) =>
       prev.map((item) => {
         const line = cart.find((l) => l.kind === 'item' && l.refId === item.id);
@@ -174,6 +201,8 @@ function App() {
         {tab === 'stock' && (
           <StockList
             items={filtered}
+            allItems={items}
+            sales={sales}
             activeCount={activeCount}
             activeFilterCount={activeFilterCount}
             onSearch={setSearch}
@@ -266,6 +295,7 @@ function App() {
         currencySymbol={settings.currencySymbol}
         businessName={settings.businessName}
         contactInfo={settings.contactInfo}
+        channelOptions={cartChannelOptions}
         onComplete={handleCompleteSale}
       />
       <BookingsSheet
