@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Tag } from 'lucide-react';
 import { Sheet } from './Sheet';
 import type { StockItem, Bundle } from '../types';
@@ -9,20 +9,36 @@ interface BundleBuilderProps {
   items: StockItem[];
   currencySymbol: string;
   onSave: (bundle: Omit<Bundle, 'id' | 'createdAt'>) => void;
+  /** Pre-check this item when the sheet opens — used when arriving here
+   *  from the aging-stock "Bundle it" action rather than the offers tab. */
+  preselectedItemId?: string;
 }
 
-export function BundleBuilder({ open, onClose, items, currencySymbol, onSave }: BundleBuilderProps) {
+export function BundleBuilder({
+  open,
+  onClose,
+  items,
+  currencySymbol,
+  onSave,
+  preselectedItemId,
+}: BundleBuilderProps) {
   const [name, setName] = useState('');
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(preselectedItemId ? [preselectedItemId] : []);
   const [bundlePrice, setBundlePrice] = useState('');
   const [onSale, setOnSale] = useState(true);
 
   const reset = () => {
     setName('');
-    setSelected([]);
+    setSelected(preselectedItemId ? [preselectedItemId] : []);
     setBundlePrice('');
     setOnSale(true);
   };
+
+  useEffect(() => {
+    if (open && preselectedItemId) {
+      setSelected([preselectedItemId]);
+    }
+  }, [open, preselectedItemId]);
 
   const handleClose = () => {
     reset();

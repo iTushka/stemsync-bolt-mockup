@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { STORAGE_PREFIX, TENANT } from './config';
+import { STORAGE_PREFIX, TENANT, PILOT_SLUG } from './config';
 
 /**
  * Drop-in replacement for useState that also persists to localStorage,
@@ -33,7 +33,7 @@ export function usePersistentState<T>(
   return [state, setState];
 }
 
-/** Clears every key belonging to the current tenant — used by the
+/** Clears every key belonging to the current pilot — used by the
  *  "Reset test data" action in Settings. */
 export function clearTenantStorage() {
   const toRemove: string[] = [];
@@ -63,12 +63,12 @@ export function exportTenantData(): void {
     }
   }
 
-  const payload = { tenant: TENANT, exportedAt: new Date().toISOString(), data };
+  const payload = { pilot: PILOT_SLUG, tenant: TENANT, exportedAt: new Date().toISOString(), data };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `stemsync-${TENANT}-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `stemsync-${PILOT_SLUG}-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

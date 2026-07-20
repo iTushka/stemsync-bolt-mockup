@@ -9,6 +9,7 @@ import { CheckoutBar } from './components/CheckoutBar';
 import { SellTab } from './components/SellTab';
 import { OffersTab } from './components/OffersTab';
 import { BundleBuilder } from './components/BundleBuilder';
+import { AgingActionSheet } from './components/AgingActionSheet';
 import { WhatsAppCardSheet } from './components/WhatsAppCardSheet';
 import { AddCustomerSheet } from './components/AddCustomerSheet';
 import { SettingsSheet } from './components/SettingsSheet';
@@ -54,6 +55,9 @@ function App() {
 
   const [bundles, setBundles] = usePersistentState<Bundle[]>('bundles', []);
   const [bundleBuilderOpen, setBundleBuilderOpen] = useState(false);
+  const [bundlePreselectId, setBundlePreselectId] = useState<string | undefined>(undefined);
+
+  const [agingItem, setAgingItem] = useState<StockItem | null>(null);
 
   const [cart, setCart] = usePersistentState<CartLine[]>('cart', []);
   const [quoteOpen, setQuoteOpen] = useState(false);
@@ -110,6 +114,34 @@ function App() {
       createdAt: Date.now(),
     };
     setBundles((prev) => [newBundle, ...prev]);
+  };
+
+  const handleAgingMarkdown = (item: StockItem, newPrice: number) => {
+    setItems((prev) =>
+      prev.map((i) => (i.id === item.id ? { ...i, salePrice: newPrice, agingAction: 'markdown' } : i))
+    );
+  };
+
+  const handleAgingBundle = (item: StockItem) => {
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, agingAction: 'bundle' } : i)));
+    setBundlePreselectId(item.id);
+    setBundleBuilderOpen(true);
+  };
+
+  const handleAgingDonate = (item: StockItem, note: string) => {
+    setItems((prev) =>
+      prev.map((i) =>
+        i.id === item.id
+          ? { ...i, quantity: 0, soldOut: true, agingAction: 'donate', agingActionNote: note || undefined }
+          : i
+      )
+    );
+  };
+
+  const handleAgingOther = (item: StockItem, note: string) => {
+    setItems((prev) =>
+      prev.map((i) => (i.id === item.id ? { ...i, agingAction: 'other', agingActionNote: note } : i))
+    );
   };
 
   const handleAddToCart = (
@@ -203,6 +235,7 @@ function App() {
             items={filtered}
             allItems={items}
             sales={sales}
+            team={team}
             activeCount={activeCount}
             activeFilterCount={activeFilterCount}
             onSearch={setSearch}
@@ -212,6 +245,7 @@ function App() {
             onAddCustomer={() => setAddCustomerOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenBookings={() => setBookingsOpen(true)}
+            onOpenAging={(item) => setAgingItem(item)}
             currencySymbol={settings.currencySymbol}
           />
         )}
@@ -283,10 +317,24 @@ function App() {
       />
       <BundleBuilder
         open={bundleBuilderOpen}
-        onClose={() => setBundleBuilderOpen(false)}
+        onClose={() => {
+          setBundleBuilderOpen(false);
+          setBundlePreselectId(undefined);
+        }}
         items={items}
         currencySymbol={settings.currencySymbol}
         onSave={handleSaveBundle}
+        preselectedItemId={bundlePreselectId}
+      />
+      <AgingActionSheet
+        open={agingItem !== null}
+        item={agingItem}
+        currencySymbol={settings.currencySymbol}
+        onClose={() => setAgingItem(null)}
+        onMarkdown={handleAgingMarkdown}
+        onBundle={handleAgingBundle}
+        onDonate={handleAgingDonate}
+        onOther={handleAgingOther}
       />
       <QuoteCard
         open={quoteOpen}

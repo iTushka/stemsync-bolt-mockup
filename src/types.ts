@@ -12,6 +12,10 @@ export type Category =
   | 'Kurti'
   | 'Clothing'
   | 'Fabric'
+  | 'Food & Drink'
+  | 'Jewellery'
+  | 'Clothing & Textiles'
+  | 'Home & Décor'
   | 'Accessories'
   | 'Other'
   /** @deprecated legacy generic-florist categories, kept only for backward type-compatibility */
@@ -43,6 +47,8 @@ export interface SalesChannel {
   price?: number;
 }
 
+export type AgingAction = 'markdown' | 'bundle' | 'donate' | 'other';
+
 export interface StockItem {
   id: string;
   name: string;
@@ -58,6 +64,11 @@ export interface StockItem {
   aging: boolean;
   soldOut: boolean;
   createdAt: number;
+  /** What the seller decided to do about this item while it was aging —
+   *  set once they pick an option from the aging-stock action sheet, so the
+   *  card can show what happened instead of just losing the clock icon. */
+  agingAction?: AgingAction;
+  agingActionNote?: string;
 }
 
 export interface Filters {

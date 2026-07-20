@@ -1,9 +1,11 @@
 import { Search, SlidersHorizontal, Plus, Clock, Package2 } from 'lucide-react';
-import type { StockItem, Sale } from '../types';
+import type { StockItem, Sale, TeamUser } from '../types';
 import { margin } from '../types';
 import { HeaderIconButtons } from './HeaderIconButtons';
 import { InsightBar } from './InsightBar';
 import { stockInsights } from '../insights';
+import { EarningsStrip } from './EarningsStrip';
+import { ShareAccountHint } from './ShareAccountHint';
 
 interface StockListProps {
   items: StockItem[];
@@ -11,6 +13,7 @@ interface StockListProps {
    *  not just whatever the seller's currently searching or filtering. */
   allItems: StockItem[];
   sales: Sale[];
+  team: TeamUser[];
   activeCount: number;
   activeFilterCount: number;
   onSearch: (q: string) => void;
@@ -20,13 +23,22 @@ interface StockListProps {
   onAddCustomer: () => void;
   onOpenSettings: () => void;
   onOpenBookings: () => void;
+  onOpenAging: (item: StockItem) => void;
   currencySymbol: string;
 }
+
+const AGING_ACTION_LABEL: Record<NonNullable<StockItem['agingAction']>, string> = {
+  markdown: 'Marked down',
+  bundle: 'Bundled',
+  donate: 'Given away',
+  other: 'Noted',
+};
 
 export function StockList({
   items,
   allItems,
   sales,
+  team,
   activeCount,
   activeFilterCount,
   onSearch,
@@ -36,6 +48,7 @@ export function StockList({
   onAddCustomer,
   onOpenSettings,
   onOpenBookings,
+  onOpenAging,
   currencySymbol,
 }: StockListProps) {
   const menuItems = [
@@ -65,7 +78,11 @@ export function StockList({
         </div>
       </div>
 
+      <EarningsStrip sales={sales} items={allItems} currencySymbol={currencySymbol} />
+
       <InsightBar chips={stockInsights(allItems, sales)} />
+
+      <ShareAccountHint teamSize={team.length} onOpenSettings={onOpenSettings} />
 
       {/* Row 2: Search + Filter */}
       <div className="sticky top-[52px] z-10 bg-cream-50/95 backdrop-blur-md px-4 pb-3">
@@ -104,7 +121,7 @@ export function StockList({
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {items.map((item) => (
-              <StockCard key={item.id} item={item} currencySymbol={currencySymbol} />
+              <StockCard key={item.id} item={item} currencySymbol={currencySymbol} onOpenAging={onOpenAging} />
             ))}
           </div>
         )}
@@ -122,7 +139,15 @@ export function StockList({
   );
 }
 
-function StockCard({ item, currencySymbol }: { item: StockItem; currencySymbol: string }) {
+function StockCard({
+  item,
+  currencySymbol,
+  onOpenAging,
+}: {
+  item: StockItem;
+  currencySymbol: string;
+  onOpenAging: (item: StockItem) => void;
+}) {
   const m = margin(item.purchasePrice, item.salePrice);
   return (
     <div className="bg-white rounded-2xl shadow-card overflow-hidden hover:shadow-cardHover transition-shadow">
@@ -136,10 +161,21 @@ function StockCard({ item, currencySymbol }: { item: StockItem; currencySymbol: 
             </span>
           </div>
         )}
-        {item.aging && (
-          <div className="absolute top-2 right-2 w-7 h-7 rounded-full bg-amber-100/95 flex items-center justify-center" title="Aging stock">
-            <Clock size={14} className="text-amber-600" />
+        {item.agingAction ? (
+          <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-white/95 text-[10px] font-semibold text-stone-600 shadow-sm">
+            {AGING_ACTION_LABEL[item.agingAction]}
           </div>
+        ) : (
+          item.aging && (
+            <button
+              onClick={() => onOpenAging(item)}
+              className="absolute top-2 right-2 w-7 h-7 rounded-full bg-amber-100/95 flex items-center justify-center hover:bg-amber-200 active:scale-90 transition"
+              title="Aging stock — tap for options"
+              aria-label="Aging stock — tap for options"
+            >
+              <Clock size={14} className="text-amber-600" />
+            </button>
+          )
         )}
         {item.soldOut && (
           <div className="absolute inset-0 bg-stone-900/30 flex items-center justify-center">
