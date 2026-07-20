@@ -1,40 +1,73 @@
 /**
- * Very small tenant-detection layer for running two separate pilot
- * instances from the same codebase: which tenant is active is picked from
- * (in priority order) a ?tenant= query param, then the URL path
- * (tuvara.glocalunit.com/flowertot), then the hostname, falling back to
- * Flowertot as the default. This lets us deploy the exact same build to a
- * single domain with both pilots living at their own path, to two
- * different subdomains, or test both locally via a query param — no
- * divergent code branches to keep in sync.
+ * Two separate concepts, deliberately kept apart:
  *
- * Path-based routing needs one thing on the hosting side: a catch-all
- * rewrite so a direct visit or refresh at /flowertot or /jhums still
- * serves index.html instead of 404ing (this app has no server-side
- * routing — see public/_redirects for the Cloudflare Pages version of
- * that rule).
+ * - TENANT ("category configuration"): which category list/keywords/field
+ *   labels this business sees — see categoryFieldMap.ts. A small, closed
+ *   set, because a whole new tenant means writing a new category list.
+ * - PILOT_SLUG ("URL path + storage namespace"): which specific pilot is
+ *   running. Several pilots can share the same tenant (e.g. Moja Berlin and
+ *   Shoilee Dhaka both use the broad 'general' tenant) without their test
+ *   data colliding, because storage is namespaced by slug, not by tenant.
+ *
+ * Detection priority (same for both, resolved together via the slug):
+ * a ?tenant= query param, then the first URL path segment
+ * (tuvara.glocalunit.com/flowertot), then a hostname substring match,
+ * falling back to 'flowertot'. Path-based routing needs a catch-all
+ * rewrite on the hosting side so a direct visit/refresh at e.g. /moja
+ * still serves index.html instead of 404ing — see public/_redirects.
  */
-export type TenantId = 'flowertot' | 'jhums';
+export type TenantId = 'flowertot' | 'jhums' | 'general';
 
-function detectTenant(): TenantId {
-  if (typeof window === 'undefined') return 'flowertot';
+export type PilotSlug = 'flowertot' | 'jhums' | 'moja' | 'shoilee';
 
-  const fromQuery = new URLSearchParams(window.location.search).get('tenant');
-  if (fromQuery === 'jhums' || fromQuery === 'flowertot') return fromQuery;
+const TENANT_BY_PILOT_SLUG: Record<PilotSlug, TenantId> = {
+  flowertot: 'flowertot',
+  jhums: 'jhums',
+  moja: 'general',
+  shoilee: 'general',
+};
 
-  const firstPathSegment = window.location.pathname.split('/')[1]?.toLowerCase();
-  if (firstPathSegment === 'jhums' || firstPathSegment === 'flowertot') {
-    return firstPathSegment;
-  }
+/** Each pilot's own market currency — kept separate from TENANT because two
+ *  pilots can share a tenant's category config while trading in different
+ *  currencies (Moja/Berlin in €, Shoilee/Dhaka in ৳). */
+const CURRENCY_BY_PILOT_SLUG: Record<PilotSlug, string> = {
+  flowertot: '£',
+  jhums: '৳',
+  moja: '€',
+  shoilee: '৳',
+};
 
-  if (window.location.hostname.includes('jhums')) return 'jhums';
-  return 'flowertot';
+const DEFAULT_PILOT_SLUG: PilotSlug = 'flowertot';
+
+function isPilotSlug(value: string | undefined): value is PilotSlug {
+  return !!value && value in TENANT_BY_PILOT_SLUG;
 }
 
-export const TENANT: TenantId = detectTenant();
+function detectPilotSlug(): PilotSlug {
+  if (typeof window === 'undefined') return DEFAULT_PILOT_SLUG;
 
-export const DEFAULT_CURRENCY = TENANT === 'jhums' ? '৳' : '£';
+  const fromQuery = new URLSearchParams(window.location.search).get('tenant') ?? undefined;
+  if (isPilotSlug(fromQuery)) return fromQuery;
 
-/** Every localStorage key is prefixed with this, so the two pilots' test
- *  data can never collide even if tested in the same browser. */
-export const STORAGE_PREFIX = `stemsync-${TENANT}`;
+  const firstPathSegment = window.location.pathname.split('/')[1]?.toLowerCase();
+  if (isPilotSlug(firstPathSegment)) return firstPathSegment;
+
+  const hostname = window.location.hostname.toLowerCase();
+  const hostnameMatch = (Object.keys(TENANT_BY_PILOT_SLUG) as PilotSlug[]).find((slug) =>
+    hostname.includes(slug)
+  );
+  if (hostnameMatch) return hostnameMatch;
+
+  return DEFAULT_PILOT_SLUG;
+}
+
+export const PILOT_SLUG: PilotSlug = detectPilotSlug();
+export const TENANT: TenantId = TENANT_BY_PILOT_SLUG[PILOT_SLUG];
+
+export const DEFAULT_CURRENCY = CURRENCY_BY_PILOT_SLUG[PILOT_SLUG];
+
+/** Every localStorage key is prefixed with this, namespaced per PILOT
+ *  (not per tenant) — so two pilots sharing the same tenant (e.g. Moja and
+ *  Shoilee both on 'general') never collide even if tested in the same
+ *  browser. */
+export const STORAGE_PREFIX = `stemsync-${PILOT_SLUG}`;

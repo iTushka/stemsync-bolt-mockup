@@ -7,7 +7,7 @@ import { buildAdCopy, copyToClipboard } from '../adCopy';
 import { Sheet } from './Sheet';
 import { UpgradePrompt } from './UpgradePrompt';
 import { AiBadge } from './AiBadge';
-import { CATEGORIES_BY_TENANT, categoryFieldConfig } from '../categoryFieldMap';
+import { CATEGORIES_BY_TENANT, categoryFieldConfig, ADD_ITEM_TEXT_BY_TENANT } from '../categoryFieldMap';
 import { recordCategoryCorrection } from '../categoryLearning';
 import { TENANT } from '../config';
 import { useSpeechToText } from '../useSpeechToText';
@@ -72,6 +72,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cardFileInputRef = useRef<HTMLInputElement>(null);
   const tenantCategories = CATEGORIES_BY_TENANT[TENANT];
+  const addItemText = ADD_ITEM_TEXT_BY_TENANT[TENANT];
 
   const speech = useSpeechToText((transcript) => {
     setRawText((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
@@ -349,7 +350,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
               <textarea
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
-                placeholder="Type or speak what you bought — e.g. '40 white roses at 80p each', or just a name"
+                placeholder={addItemText.rawTextExample(currencySymbol)}
                 rows={3}
                 className="w-full p-4 pr-12 rounded-2xl bg-white border border-stone-200 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:border-accent-400 focus:ring-2 focus:ring-accent-100 transition resize-none"
               />
@@ -369,12 +370,12 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
             </div>
             {!rawText.trim() && (
               <button
-                onClick={() => setRawText('4 trays, 6 per tray, £25 total')}
+                onClick={() => setRawText(addItemText.quickFillRawText(currencySymbol))}
                 className="mt-2 text-xs text-stone-400 hover:text-accent-600 transition text-left"
               >
-                Buying a whole tray? Try:{' '}
+                {addItemText.quickFillPrompt}{' '}
                 <span className="underline decoration-dotted">
-                  "4 trays, 6 per tray, £25 total"
+                  "{addItemText.quickFillRawText(currencySymbol)}"
                 </span>
               </button>
             )}
@@ -479,7 +480,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
                 <input
                   value={draft.name}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                  placeholder="E.g. Parlour palm"
+                  placeholder={addItemText.namePlaceholder}
                   className="input"
                 />
               </Field>
@@ -496,9 +497,9 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
               {batchMode && (
                 <div className="rounded-xl bg-cream-100 border border-stone-200 p-3 space-y-2.5 animate-fadeIn">
                   <p className="text-xs text-stone-500 leading-snug">
-                    Enter what you paid in total — the cost per plant is worked out for you.
+                    Enter what you paid in total — the cost per unit is worked out for you.
                     <br />
-                    E.g. 2 trays × 6 per tray = 12 plants, {currencySymbol}20 total →{' '}
+                    E.g. 2 {addItemText.batchUnitLabel.toLowerCase()} × 6 {addItemText.batchPerUnitLabel.toLowerCase()} = 12 units, {currencySymbol}20 total →{' '}
                     {currencySymbol}1.67 each.
                   </p>
                   <div className="grid grid-cols-3 gap-2">
@@ -515,7 +516,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
                         className="input"
                       />
                     </Field>
-                    <Field label="Trays">
+                    <Field label={addItemText.batchUnitLabel}>
                       <input
                         type="number"
                         inputMode="numeric"
@@ -524,11 +525,11 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
                           setBatchTrays(e.target.value);
                           applyBatchCalculation(batchTotalCost, e.target.value, batchPiecesPerTray);
                         }}
-                        placeholder="2"
+                        placeholder={addItemText.batchUnitPlaceholder}
                         className="input"
                       />
                     </Field>
-                    <Field label="Per tray">
+                    <Field label={addItemText.batchPerUnitLabel}>
                       <input
                         type="number"
                         inputMode="numeric"
@@ -537,14 +538,14 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
                           setBatchPiecesPerTray(e.target.value);
                           applyBatchCalculation(batchTotalCost, batchTrays, e.target.value);
                         }}
-                        placeholder="6"
+                        placeholder={addItemText.batchPerUnitPlaceholder}
                         className="input"
                       />
                     </Field>
                   </div>
                   {batchTotalCost && batchTrays && batchPiecesPerTray && draft.quantity > 0 && draft.purchasePrice > 0 && (
                     <AiBadge
-                      text={`${draft.quantity} plants at ${currencySymbol}${draft.purchasePrice.toFixed(2)} each — cost calculated automatically.`}
+                      text={`${draft.quantity} units at ${currencySymbol}${draft.purchasePrice.toFixed(2)} each — cost calculated automatically.`}
                     />
                   )}
                 </div>
@@ -656,7 +657,7 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
               {batchMode && tiersEnabled && (
                 <div className="rounded-xl bg-cream-100 border border-stone-200 p-3 space-y-2.5 animate-fadeIn">
                   <p className="text-xs text-stone-500 leading-snug">
-                    Same cost per plant ({currencySymbol}{draft.purchasePrice.toFixed(2)}), different sale prices —
+                    Same cost per unit ({currencySymbol}{draft.purchasePrice.toFixed(2)}), different sale prices —
                     each tier saves as its own stock item. E.g. "Small" / 4 / 2.5× and "Large" / 2 / 4×.
                   </p>
                   {tiers.length > 0 && (

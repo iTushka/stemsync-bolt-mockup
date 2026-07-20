@@ -48,6 +48,11 @@ export const CATEGORIES_BY_TENANT: Record<TenantId, Category[]> = {
   // fabric by the metre (per the original pilot brief); worth confirming
   // directly with her whether that's still accurate before relying on it.
   jhums: ['Three-piece', 'Two-piece', 'Saree', 'Kurti', 'Fabric', 'Accessories', 'Other'],
+  // 'general' covers pilots that don't fit either specialised tenant (Moja
+  // Berlin's chilli oil, Shoilee Dhaka's handmade jewellery) — deliberately
+  // broad rather than another bespoke list, since a third specialised
+  // tenant per new pilot candidate doesn't scale.
+  general: ['Food & Drink', 'Jewellery', 'Clothing & Textiles', 'Home & Décor', 'Accessories', 'Other'],
 };
 
 interface CategoryFieldConfig {
@@ -114,11 +119,80 @@ const CONFIG_BY_CATEGORY: Partial<Record<Category, CategoryFieldConfig>> = {
     environmentLabel: 'Width / length available',
     environmentPlaceholder: 'E.g. 44 inch width, sold per metre',
   },
+  'Food & Drink': {
+    environmentLabel: 'Storage / shelf life',
+    environmentPlaceholder: 'E.g. Keep refrigerated, best within 3 weeks',
+  },
+  Jewellery: {
+    environmentLabel: 'Materials',
+    environmentPlaceholder: 'E.g. Sterling silver, freshwater pearl',
+  },
+  'Clothing & Textiles': {
+    environmentLabel: 'Size range',
+    environmentPlaceholder: 'E.g. S–XL, or free size',
+  },
+  'Home & Décor': {
+    environmentLabel: 'Dimensions',
+    environmentPlaceholder: 'E.g. 20cm x 15cm',
+  },
 };
 
 export function categoryFieldConfig(category: Category): CategoryFieldConfig {
   return CONFIG_BY_CATEGORY[category] ?? DEFAULT_CONFIG;
 }
+
+/**
+ * Tenant-aware copy for the "add item" flow — the free-text field's example,
+ * the batch/tray quick-fill button, and the batch panel's own field labels.
+ * These were previously hardcoded to a UK houseplant scenario ("40 white
+ * roses at 80p each", "Trays"/"Per tray") regardless of which tenant was
+ * running. Currency-bearing strings take currencySymbol as an argument
+ * rather than embedding a symbol, so they stay correct even if a tenant's
+ * default currency is overridden in Settings.
+ */
+export interface AddItemTenantText {
+  rawTextExample: (currencySymbol: string) => string;
+  quickFillPrompt: string;
+  quickFillRawText: (currencySymbol: string) => string;
+  namePlaceholder: string;
+  batchUnitLabel: string;
+  batchPerUnitLabel: string;
+  batchUnitPlaceholder: string;
+  batchPerUnitPlaceholder: string;
+}
+
+export const ADD_ITEM_TEXT_BY_TENANT: Record<TenantId, AddItemTenantText> = {
+  flowertot: {
+    rawTextExample: (c) => `Type or speak what you bought — e.g. '3 monstera at ${c}15 each', or just a name`,
+    quickFillPrompt: 'Buying a whole tray? Try:',
+    quickFillRawText: (c) => `4 trays, 6 per tray, ${c}25 total`,
+    namePlaceholder: 'E.g. Parlour palm',
+    batchUnitLabel: 'Trays',
+    batchPerUnitLabel: 'Per tray',
+    batchUnitPlaceholder: '2',
+    batchPerUnitPlaceholder: '6',
+  },
+  jhums: {
+    rawTextExample: (c) => `Type or speak what you bought — e.g. '5 sarees at ${c}800 each', or just a name`,
+    quickFillPrompt: 'Buying a whole bundle? Try:',
+    quickFillRawText: (c) => `3 bundles, 10 per bundle, ${c}3000 total`,
+    namePlaceholder: 'E.g. Cotton three-piece',
+    batchUnitLabel: 'Bundles',
+    batchPerUnitLabel: 'Per bundle',
+    batchUnitPlaceholder: '3',
+    batchPerUnitPlaceholder: '10',
+  },
+  general: {
+    rawTextExample: (c) => `Type or speak what you bought — e.g. '10 jars of chilli oil at ${c}6 each', or just a name`,
+    quickFillPrompt: 'Buying a whole batch? Try:',
+    quickFillRawText: (c) => `5 batches, 12 per batch, ${c}60 total`,
+    namePlaceholder: 'E.g. Handmade beaded necklace',
+    batchUnitLabel: 'Batches',
+    batchPerUnitLabel: 'Per batch',
+    batchUnitPlaceholder: '5',
+    batchPerUnitPlaceholder: '12',
+  },
+};
 
 /**
  * Small, deliberately modest keyword lists for a first-pass category guess
@@ -147,5 +221,15 @@ export const CATEGORY_KEYWORDS_BY_TENANT: Record<TenantId, Partial<Record<Catego
     Saree: ['শাড়ি', 'saree', 'sari', 'jamdani', 'katan'],
     Kurti: ['কুর্তি', 'kurti', 'kurta'],
     Fabric: ['fabric', 'cotton', 'georgette', 'silk', 'বাটিক', 'batik'],
+  },
+  // Deliberately the smallest of the three lists — 'general' spans
+  // unrelated pilots (chilli oil, jewellery) with no shared vocabulary, so
+  // a bigger guessed list here would be less honest than leaving more of
+  // it to fall through to "not guessed, leave it blank".
+  general: {
+    'Food & Drink': ['oil', 'sauce', 'jam', 'pickle', 'spice', 'honey', 'tea', 'coffee'],
+    Jewellery: ['necklace', 'earring', 'bracelet', 'ring', 'pendant', 'beaded'],
+    'Clothing & Textiles': ['scarf', 'shawl', 'textile', 'weave'],
+    'Home & Décor': ['candle', 'vase', 'ornament', 'decor'],
   },
 };
