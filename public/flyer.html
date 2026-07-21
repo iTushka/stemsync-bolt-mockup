@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tuvara — Mobile Flyer</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fraunces:opsz,wght@9..144,700;9..144,900&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --paper: #F7EEDC;
+            --ink: #26314F;
+            --thread: #B5432A;
+            --leaf: #4B7355;
+            --marigold: #E2A73E;
+        }
+
+        body { 
+            font-family: 'DM Sans', sans-serif; 
+            background-color: #cbd5e1; 
+            margin: 0; padding: 0;
+            color: var(--ink);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+        }
+
+        @media (min-width: 481px) {
+            body { padding: 24px 0; }
+        }
+        
+        .font-display { font-family: 'Fraunces', serif; }
+        
+        /* Huvudbehållare: Optimerad för mobilskärm, max-bredd för läsbarhet */
+        .mobile-container {
+            background-color: var(--paper);
+            width: 100%;
+            max-width: 480px;
+            margin: 0 auto;
+            position: relative;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* --- NAKSHI KANTHA: subtil löpstygns-bakgrundstextur ---
+           Original SVG-mönster inspirerat av kantha-broderiets täta,
+           parallella löpstygn (রান সেলাই) — inte ett foto av ett
+           faktiskt konstverk, så det renderas identiskt online,
+           offline och vid utskrift, och drar minimalt med bläck. */
+        .mobile-container::before {
+            content: "";
+            position: absolute; inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.05;
+            background-image:
+                repeating-linear-gradient(45deg, var(--thread) 0px, var(--thread) 1.5px, transparent 1.5px, transparent 9px),
+                repeating-linear-gradient(-45deg, var(--leaf) 0px, var(--leaf) 1.5px, transparent 1.5px, transparent 9px);
+        }
+        .mobile-container > * { position: relative; z-index: 1; }
+
+        /* Dekorativa kalka/paisley-hörnmotiv (কলকা) — traditionellt
+           använt för att smycka pad/kanter och hörn i nakshi kantha,
+           till skillnad från lotusmotivet som hör hemma i mitten. */
+        .kantha-rosette {
+            position: absolute;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.18;
+        }
+        .kantha-rosette.top-right { top: -6px; right: -4px; }
+        .kantha-rosette.bottom-left { bottom: 6px; left: -4px; transform: scaleX(-1) rotate(12deg); }
+
+        /* Central lotus-rosett (পদ্ম) — det klassiska centralmotivet,
+           placerad bakom principkortet som en nick till kompositionen. */
+        .kantha-lotus {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.12;
+        }
+
+        /* HEADER */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 20px 12px;
+            position: relative;
+        }
+        
+        header h1 { margin: 0; font-size: 24px; font-weight: 900; line-height: 1; color: var(--ink);}
+        header p { margin: 4px 0 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: bold; color: #64748b; }
+
+        /* HERO BILD */
+        .hero-img { padding: 0 16px; }
+        .hero-img-inner {
+            width: 100%; height: 160px;
+            border-radius: 12px; overflow: hidden;
+            border: 1px solid rgba(203,213,225,0.5);
+            background-color: #e2e8f0;
+        }
+        .hero-img img { width: 100%; height: 100%; object-fit: cover; }
+
+        /* HEADLINE */
+        .headline { text-align: center; padding: 16px 20px 12px; }
+        .headline h2 {
+            font-family: 'Fraunces', serif;
+            font-size: 20px; line-height: 1.2;
+            margin: 0 0 8px; color: var(--thread);
+        }
+        .headline p {
+            font-size: 13px; line-height: 1.4;
+            margin: 0; color: #334155; font-weight: 500;
+        }
+
+        /* DIVIDER — kantha löpstygns-våg istället för en rak streckad linje */
+        .divider {
+            width: 85%;
+            height: 12px;
+            margin: 6px auto;
+            background-repeat: repeat-x;
+            background-position: center;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='12' viewBox='0 0 40 12'%3E%3Cpath d='M0 6 Q10 -1 20 6 T40 6' stroke='%23B5432A' stroke-width='1.6' fill='none' stroke-dasharray='2.5 3' stroke-linecap='round' opacity='0.55'/%3E%3C/svg%3E");
+        }
+
+        /* PAIN POINTS */
+        .pain-points { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+        .pain-card {
+            background: white; padding: 14px;
+            border-radius: 12px; border-left: 4px solid var(--paper);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            display: flex; align-items: flex-start; gap: 12px;
+        }
+        .pain-card .icon { font-size: 24px; line-height: 1; }
+        .pain-card h3 { font-size: 13px; font-weight: bold; margin: 0 0 4px; line-height: 1.2; color: var(--ink);}
+        .pain-card p { font-size: 11.5px; line-height: 1.3; color: #475569; margin: 0; }
+        .coming-soon-tag {
+            position:absolute; top:10px; right:10px;
+            background:rgba(226,167,62,0.25); color:#b45309;
+            font-size:8.5px; font-weight:bold; padding:2px 7px;
+            border-radius:99px; letter-spacing:0.03em;
+        }
+
+        /* PRINCIPLE CARD */
+        .principle-card {
+            margin: 0 16px 16px;
+            border: 1.5px dashed var(--thread);
+            background: rgba(255,255,255,0.5);
+            border-radius: 12px; padding: 12px; text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .principle-card h3 { font-size: 13px; font-weight: bold; margin: 0 0 4px; color: var(--thread); position: relative; }
+        .principle-card p { font-size: 11.5px; line-height: 1.2; color: #334155; margin: 0; position: relative; }
+
+        /* HOW IT WORKS */
+        .how-it-works { padding: 0 20px 20px; }
+        .step { display: flex; align-items: flex-start; margin-bottom: 10px; }
+        .step-num {
+            width: 24px; height: 24px; border-radius: 50%;
+            background: white; color: var(--thread);
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid rgba(181, 67, 42, 0.2);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            margin-right: 12px; margin-top: 2px; flex-shrink: 0;
+        }
+        .step-num span { font-family: 'Fraunces', serif; font-size: 14px; font-weight: 900; line-height: 1; padding-top: 2px;}
+        .step-text { font-size: 13px; font-weight: 500; line-height: 1.2; margin: 0; padding-top: 4px; color: #1e293b; }
+
+        /* BONUS BOX */
+        .bonus-box {
+            background: rgba(226, 167, 62, 0.15);
+            border: 1px solid rgba(226, 167, 62, 0.4);
+            border-radius: 8px; padding: 12px;
+            margin: 0 20px 20px; display: flex; gap: 10px;
+        }
+        .bonus-icon { font-size: 18px; line-height: 1;}
+        .bonus-content p { margin: 0; font-size: 10.5px; line-height: 1.35; color: #334155; }
+        .bonus-content strong { color: #b45309; }
+
+        /* CALL TO ACTION */
+        .cta {
+            display: block; width: 100%;
+            background: linear-gradient(to bottom, #B5432A, #993822);
+            color: white; padding: 20px;
+            text-align: center; text-decoration: none;
+            margin-top: auto; position: relative; overflow: hidden;
+        }
+        .cta-glow {
+            position: absolute; right: -40px; top: -40px;
+            width: 128px; height: 128px;
+            background: rgba(255,255,255,0.1); border-radius: 50%; filter: blur(24px);
+        }
+        .cta h2 { font-family: 'Fraunces', serif; font-size: 17px; margin: 0 0 4px; font-weight: bold; position: relative; z-index: 10;}
+        .cta p { font-size: 11px; margin: 0 0 12px; opacity: 0.9; line-height: 1.2; position: relative; z-index: 10;}
+        
+        .cta-action {
+            display: flex; align-items: center; justify-content: center; gap: 16px; position: relative; z-index: 10;
+        }
+        .cta-btn {
+            background: white; color: var(--thread);
+            padding: 10px 20px; border-radius: 99px;
+            font-weight: bold; font-size: 14px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .cta-btn span { font-size: 18px; line-height: 1; }
+        .cta-qr {
+            width: 48px; height: 48px; background: white;
+            padding: 4px; border-radius: 8px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .cta-qr img { width: 100%; height: 100%; display: block; }
+        
+        /* FOOTER NOTE */
+        .footer-note { text-align: center; padding: 16px 20px; background: var(--paper); position: relative; }
+        .footer-note p { font-size: 9px; color: #64748b; margin: 0; line-height: 1.3; }
+
+        @media print {
+            body { background-color: var(--paper); }
+            @page { size: A5 portrait; margin: 8mm; }
+            .mobile-container {
+                max-width: 100%;
+                min-height: auto;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    
+    <div class="mobile-container">
+
+        <!-- Dekorativa kalka/paisley-hörnmotiv (কলকা) — original SVG,
+             inte ett foto av ett faktiskt broderat verk. -->
+        <svg class="kantha-rosette top-right" width="46" height="64" viewBox="0 0 50 70" fill="none">
+            <path d="M25 6 C38 6 42 20 38 30 C34 42 22 48 13 42 C6 37 7 27 14 25 C18 24 20 27 18 29 C17 30.5 15 30 15 28"
+                  stroke="#B5432A" stroke-width="1.6" stroke-dasharray="2.5 2.5" stroke-linecap="round"/>
+            <path d="M22 14 C28 16 30 22 27 27" stroke="#4B7355" stroke-width="1.3" stroke-dasharray="2 2" stroke-linecap="round"/>
+            <path d="M20 20 C24 22 25 26 23 29" stroke="#4B7355" stroke-width="1.3" stroke-dasharray="2 2" stroke-linecap="round"/>
+        </svg>
+        <svg class="kantha-rosette bottom-left" width="40" height="56" viewBox="0 0 50 70" fill="none">
+            <path d="M25 6 C38 6 42 20 38 30 C34 42 22 48 13 42 C6 37 7 27 14 25 C18 24 20 27 18 29 C17 30.5 15 30 15 28"
+                  stroke="#4B7355" stroke-width="1.6" stroke-dasharray="2.5 2.5" stroke-linecap="round"/>
+            <path d="M22 14 C28 16 30 22 27 27" stroke="#B5432A" stroke-width="1.3" stroke-dasharray="2 2" stroke-linecap="round"/>
+            <path d="M20 20 C24 22 25 26 23 29" stroke="#B5432A" stroke-width="1.3" stroke-dasharray="2 2" stroke-linecap="round"/>
+        </svg>
+        
+        <!-- HEADER -->
+        <header>
+            <div>
+                <h1 class="font-display">Tuvara</h1>
+                <p>by GlocalUnit</p>
+            </div>
+        </header>
+        
+        <!-- HERO BILD -->
+        <div class="hero-img">
+            <div class="hero-img-inner">
+                <!-- Autentisk kvinnlig entreprenör/verksamhetsbild rekommenderas här -->
+                <img src="https://images.pexels.com/photos/7309930/pexels-photo-7309930.jpeg?auto=compress&cs=tinysrgb&w=800" alt="Small business owner using phone">
+            </div>
+        </div>
+
+        <!-- HEADLINE -->
+        <div class="headline">
+            <h2>আপনার ব্যবসা, আপনার স্টক, আপনার হিসাব —<br>সব একটা জায়গায়, আপনার ফোনেই।</h2>
+            <p>বড় কোনো কর্পোরেট কোম্পানির জন্য নয়, বরং আপনার মতো ক্ষুদ্র ও একক উদ্যোক্তাদের জন্যই তৈরি।</p>
+        </div>
+
+        <!-- DIVIDER -->
+        <div class="divider"></div>
+
+        <!-- PAIN POINTS (4 kort) -->
+        <div class="pain-points">
+            
+            <div class="pain-card">
+                <div class="icon">📦</div>
+                <div>
+                    <h3>একই লটের ভিন্ন ভিন্ন পণ্য?</h3>
+                    <p>পাইকারি বাজার থেকে কেনা সব পণ্যের দাম এক নয়। Tuvara প্রতিটি পণ্যের জন্য একটি সঠিক দামের প্রস্তাব দেয়।</p>
+                </div>
+            </div>
+            
+            <div class="pain-card">
+                <div class="icon">💬</div>
+                <div>
+                    <h3>সব জায়গায় বিক্রি করেন, হিসাব রাখা কঠিন?</h3>
+                    <p>ফেসবুক-টিকটকে আলাদা ক্যাপশন লিখতে সময় লাগে, আর মাস শেষে কী বিক্রি হয়েছে মনে রাখাও কঠিন। Tuvara সেকেন্ডে পোস্ট লিখে দেয়, আর কোনো এক্সেল ছাড়াই সহজ সারাংশ দেখায়।</p>
+                </div>
+            </div>
+
+            <div class="pain-card" style="position:relative;">
+                <span class="coming-soon-tag">শীঘ্রই আসছে</span>
+                <div class="icon">🌍</div>
+                <div>
+                    <h3>বিদেশি ক্রেতা বা সাপ্লায়ার নিয়ে কাজ করেন?</h3>
+                    <p>ডলার, পাউন্ড বা ইউরোতে দাম হিসাব করা ঝামেলার? Tuvara আপনার নিজের সেভ করা রেট দিয়ে বিদেশি মুদ্রা টাকায় (৳) বদলে দেবে।</p>
+                </div>
+            </div>
+
+            <div class="pain-card" style="position:relative;">
+                <span class="coming-soon-tag">শীঘ্রই আসছে</span>
+                <div class="icon">🧮</div>
+                <div>
+                    <h3>একটা প্রোডাক্টে অনেক উপকরণ লাগে?</h3>
+                    <p>কাঁচামাল, মজুরি — সব আলাদা আলাদা লিখুন, Tuvara যোগ করে মোট খরচ বের করে দেবে।</p>
+                </div>
+            </div>
+            
+        </div>
+
+        <!-- PRINCIPLE CARD (med central lotus-rosett, পদ্ম, bakom texten) -->
+        <div class="principle-card">
+            <svg class="kantha-lotus" width="72" height="72" viewBox="0 0 72 72" fill="none">
+                <circle cx="36" cy="36" r="30" stroke="#B5432A" stroke-width="1.4" stroke-dasharray="3 3"/>
+                <circle cx="36" cy="36" r="20" stroke="#4B7355" stroke-width="1.4" stroke-dasharray="3 3"/>
+                <line x1="50" y1="36" x2="65" y2="36" stroke="#B5432A" stroke-width="1.4" stroke-dasharray="2 2"/>
+                <line x1="45.9" y1="45.9" x2="56.5" y2="56.5" stroke="#B5432A" stroke-width="1.4" stroke-dasharray="2 2"/>
+                <line x1="36" y1="50" x2="36" y2="65" stroke="#B5432A" stroke-width="1.4" stroke-dasharray="2 2"/>
+                <line x1="26.1" y1="45.9" x2="15.5" y2="56.5" stroke="#B5432A" stroke-width="1.4" stroke-dasharray="2 2"/>
+                <line x1="22" y1="36" x2="7" y2="36" stroke="#B5432A" stroke-width="1.4" stroke-dasharray="2 2"/>
+                <line x1="26.1" y1="26.1" x2="15.5" y2="15.5" stroke="#B5432A" stroke-width="1.4" stroke-dasharray="2 2"/>
+                <line x1="36" y1="22" x2="36" y2="7" stroke="#B5432A" stroke-width="1.4" stroke-dasharray="2 2"/>
+                <line x1="45.9" y1="26.1" x2="56.5" y2="15.5" stroke="#B5432A" stroke-width="1.4" stroke-dasharray="2 2"/>
+                <circle cx="36" cy="36" r="4" fill="#E2A73E"/>
+            </svg>
+            <h3>🔒 সিদ্ধান্ত সবসময় আপনার।</h3>
+            <p>অ্যাপ নিজে থেকে কোনো অন্ধ অনুমান করে না। চূড়ান্ত সিদ্ধান্তটি সবসময় আপনারই থাকবে।</p>
+        </div>
+
+        <!-- HOW IT WORKS -->
+        <div class="how-it-works">
+            <div class="step">
+                <div class="step-num"><span>১</span></div>
+                <p class="step-text">যা বিক্রি করতে চান, তার ছবি তুলুন বা মুখে বলুন।</p>
+            </div>
+            <div class="step">
+                <div class="step-num"><span>২</span></div>
+                <p class="step-text">একটি মানানসই দামের পরামর্শ পাবেন (চাইলে বদলাতে পারেন)।</p>
+            </div>
+            <div class="step">
+                <div class="step-num"><span>৩</span></div>
+                <p class="step-text">সোশ্যাল মিডিয়ার জন্য রেডিমেড ক্যাপশন পেয়ে যাবেন।</p>
+            </div>
+        </div>
+
+        <!-- BONUS BOX -->
+        <div class="bonus-box">
+            <div class="bonus-icon">💡</div>
+            <div class="bonus-content">
+                <p><strong>জানেন কি?</strong> ২০২৬ সালে বাংলাদেশ ব্যাংক নতুন নিয়ম এনেছে, যাতে ছোট ব্যবসায়ীদের জন্য বিদেশি ক্রেতার কাছে সরাসরি পণ্য বিক্রি করা আগের চেয়ে সহজ হয়েছে। সঠিক নিয়ম-কানুন জানতে আপনার ব্যাংকের সাথে কথা বলুন — Tuvara শুধু আপনার পণ্যের হিসাব রাখতে আর পোস্ট লিখতে সাহায্য করে, এক্সপোর্ট নিয়ম নিয়ে না।</p>
+            </div>
+        </div>
+
+        <!-- CALL TO ACTION -->
+        <a href="https://www.cognitoforms.com/glocalunit1/tuvaracontact2" target="_blank" class="cta">
+            <div class="cta-glow"></div>
+            
+            <h2>একবার ট্রাই করে দেখতে চান?</h2>
+            <p>কোনো সাইন-আপ ফর্ম নেই। সরাসরি মেসেজ দিন — আমরা ফোনেই একসাথে দেখাব।</p>
+            
+            <div class="cta-action">
+                <div class="cta-btn">
+                    <span>📱</span> মেসেজ পাঠান
+                </div>
+                <div class="cta-qr">
+                    <!-- Om detta ska tryckas, rekommenderas en fast, nedladdad bildfil istället för detta API-anrop -->
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://www.cognitoforms.com/glocalunit1/tuvaracontact2" alt="QR Code">
+                </div>
+            </div>
+        </a>
+
+        <!-- FOOTER NOTE -->
+        <div class="footer-note">
+            <p>Tuvara এখনো একটা early-stage, hand-built প্রজেক্ট — পূর্ণাঙ্গ কোম্পানি না। GlocalUnit-এর একটা অংশ। আমরা এখন সরাসরি কাজ করছি বাংলাদেশ আর যুক্তরাজ্যের প্রথম কয়েকজন ব্যবহারকারীর সাথে।</p>
+        </div>
+        
+    </div>
+</body>
+</html>
