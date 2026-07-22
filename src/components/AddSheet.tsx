@@ -44,6 +44,18 @@ const FREE_CHANNEL_LIMIT = 1;
 
 type Draft = Omit<StockItem, 'id' | 'createdAt'>;
 
+/** One row of the ephemeral cost-part calculator — never persisted, never a
+ *  StockItem field. See AddSheet's cost-calculator block below. */
+interface CostPart {
+  id: string;
+  label: string;
+  amount: string;
+}
+
+function costPartsTotal(parts: CostPart[]): number {
+  return parts.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+}
+
 const emptyDraft: Draft = {
   name: '',
   category: 'Other',
@@ -126,6 +138,13 @@ export function AddSheet({
   const [foreignPurchaseMode, setForeignPurchaseMode] = useState(false);
   const [foreignAmount, setForeignAmount] = useState('');
   const [foreignCurrency, setForeignCurrency] = useState<CurrencyCode | ''>('');
+
+  // Cost part breakdown — ephemeral helper for building up purchasePrice
+  // from several material/labour lines instead of doing the addition by
+  // hand. Nothing here is persisted once applied; see AddSheet's CLAUDE.md
+  // scope note on this feature.
+  const [costCalcOpen, setCostCalcOpen] = useState(false);
+  const [costParts, setCostParts] = useState<CostPart[]>([]);
 
   // "Show price in more currencies" — purely a display toggle next to the
   // sale price; nothing here is ever written back into the draft.
@@ -695,6 +714,35 @@ export function AddSheet({
                 </div>
               )}
 
+              {!batchMode && (
+                <div>
+                  <button
+                    onClick={() => setCostCalcOpen((v) => !v)}
+                    className="text-xs font-medium text-accent-600 hover:text-accent-700 transition"
+                  >
+                    {costCalcOpen ? '− Add cost part' : '+ Add cost part'}
+                  </button>
+                  {costCalcOpen && (
+                    <div className="mt-2">
+                      <CostPartsCalculator
+                        parts={costParts}
+                        onPartsChange={setCostParts}
+                        currencySymbol={currencySymbol}
+                        onApply={(total) => {
+                          setDraft((d) => ({
+                            ...d,
+                            purchasePrice: total,
+                            salePrice: salePriceTouched ? d.salePrice : suggestSalePrice(total, markup),
+                          }));
+                          setCostParts([]);
+                          setCostCalcOpen(false);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Markup (× cost)">
                   <input
@@ -1238,5 +1286,83 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="block text-xs font-medium text-stone-500 mb-1">{label}</span>
       {children}
     </label>
+  );
+}
+
+/**
+ * Ephemeral material/labour cost breakdown — adds up freeform rows (e.g.
+ * "brass wire" + amount) and hands the total to `onApply`, which writes it
+ * straight into purchasePrice like any manually typed number. The rows
+ * themselves are never saved anywhere; available to every tenant since the
+ * need (several cost components per item) isn't industry-specific.
+ */
+function CostPartsCalculator({
+  parts,
+  onPartsChange,
+  currencySymbol,
+  onApply,
+}: {
+  parts: CostPart[];
+  onPartsChange: (parts: CostPart[]) => void;
+  currencySymbol: string;
+  onApply: (total: number) => void;
+}) {
+  const total = costPartsTotal(parts);
+
+  const updatePart = (id: string, patch: Partial<CostPart>) =>
+    onPartsChange(parts.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+
+  const removePart = (id: string) => onPartsChange(parts.filter((p) => p.id !== id));
+
+  const addPart = () =>
+    onPartsChange([...parts, { id: Math.random().toString(36).slice(2, 9), label: '', amount: '' }]);
+
+  return (
+    <div className="rounded-xl bg-cream-100 border border-stone-200 p-3 space-y-2 animate-fadeIn">
+      {parts.map((part) => (
+        <div key={part.id} className="flex gap-2 items-center">
+          <input
+            value={part.label}
+            onChange={(e) => updatePart(part.id, { label: e.target.value })}
+            placeholder="E.g. Brass wire"
+            className="input flex-1"
+          />
+          <input
+            type="number"
+            inputMode="decimal"
+            value={part.amount}
+            onChange={(e) => updatePart(part.id, { amount: e.target.value })}
+            placeholder="0"
+            className="input w-20"
+          />
+          <button
+            onClick={() => removePart(part.id)}
+            aria-label="Remove cost part"
+            className="text-stone-400 hover:text-red-500 transition shrink-0"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      ))}
+      <button
+        onClick={addPart}
+        className="inline-flex items-center gap-1 text-sm font-medium text-accent-600 hover:text-accent-700"
+      >
+        <Plus size={16} />
+        Add row
+      </button>
+      <div className="flex items-center justify-between pt-2 border-t border-stone-200">
+        <span className="text-sm font-semibold text-stone-700">
+          Total: {currencySymbol}{total.toFixed(2)}
+        </span>
+        <button
+          onClick={() => onApply(total)}
+          disabled={total <= 0}
+          className="px-3 py-1.5 rounded-full bg-accent-500 text-white text-xs font-semibold disabled:opacity-40 active:scale-95 transition"
+        >
+          Use this total
+        </button>
+      </div>
+    </div>
   );
 }
