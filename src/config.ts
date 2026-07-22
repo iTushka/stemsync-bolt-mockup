@@ -18,13 +18,41 @@
  */
 export type TenantId = 'flowertot' | 'jhums' | 'general';
 
-export type PilotSlug = 'flowertot' | 'jhums' | 'moja' | 'shoilee';
+export type PilotSlug =
+  | 'flowertot'
+  | 'jhums'
+  | 'moja'
+  | 'shoilee'
+  | 'demo-fashion'
+  | 'demo-craft'
+  | 'demo-food';
+
+/**
+ * The three sales-demo slugs (see demoSeeds.ts) — fictional, pre-seeded
+ * instances shown manually to new prospects during a sales call, one per
+ * industry profile: demo-fashion mirrors Jhum Fashion (clothing, batch
+ * variation), demo-craft mirrors Tahmina/Shoilee (jewellery, multi-part
+ * material cost), demo-food mirrors Maliha/Moja (food, small batches).
+ * Never linked to real pilot data — separate storage namespace like any
+ * other PILOT_SLUG.
+ */
+export const DEMO_PILOT_SLUGS: PilotSlug[] = ['demo-fashion', 'demo-craft', 'demo-food'];
+
+export function isDemoPilot(slug: PilotSlug): boolean {
+  return (DEMO_PILOT_SLUGS as string[]).includes(slug);
+}
 
 const TENANT_BY_PILOT_SLUG: Record<PilotSlug, TenantId> = {
   flowertot: 'flowertot',
   jhums: 'jhums',
   moja: 'general',
   shoilee: 'general',
+  // demo-fashion mirrors Jhum Fashion's category set (Three-piece/Saree/
+  // Kurti/...); demo-craft and demo-food both mirror the 'general' tenant
+  // used by Shoilee (jewellery) and Moja (food) respectively.
+  'demo-fashion': 'jhums',
+  'demo-craft': 'general',
+  'demo-food': 'general',
 };
 
 /** Each pilot's own market currency — kept separate from TENANT because two
@@ -35,6 +63,9 @@ const CURRENCY_BY_PILOT_SLUG: Record<PilotSlug, string> = {
   jhums: '৳',
   moja: '€',
   shoilee: '৳',
+  'demo-fashion': '৳',
+  'demo-craft': '৳',
+  'demo-food': '€',
 };
 
 const DEFAULT_PILOT_SLUG: PilotSlug = 'flowertot';

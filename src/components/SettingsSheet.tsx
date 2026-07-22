@@ -4,6 +4,7 @@ import { Sheet } from './Sheet';
 import { clearTenantStorage, exportTenantData, importTenantData } from '../usePersistentState';
 import type { AppSettings, TeamUser } from '../types';
 import { REFERENCE_CURRENCIES, daysSinceUpdate, isRateStale, type CurrencyCode } from '../exchangeRates';
+import { PILOT_SLUG, isDemoPilot } from '../config';
 
 interface SettingsSheetProps {
   open: boolean;
@@ -302,14 +303,19 @@ export function SettingsSheet({
         <div className="pt-2 border-t border-stone-100">
           <button
             onClick={() => {
-              if (confirm('Reset all test data on this device? This cannot be undone.')) {
+              const isDemo = isDemoPilot(PILOT_SLUG);
+              const message = isDemo
+                ? 'Reset this demo back to its starting example data? Any changes made during this walkthrough will be lost.'
+                : 'Reset all test data on this device? This cannot be undone.';
+              if (confirm(message)) {
                 clearTenantStorage();
                 window.location.reload();
               }
             }}
             className="flex items-center gap-1.5 text-xs font-medium text-stone-400 hover:text-red-500 transition"
           >
-            <RotateCcw size={13} /> Reset all test data on this device
+            <RotateCcw size={13} />
+            {isDemoPilot(PILOT_SLUG) ? 'Reset to demo data' : 'Reset all test data on this device'}
           </button>
         </div>
       </div>

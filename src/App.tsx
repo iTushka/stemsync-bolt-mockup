@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { usePersistentState } from './usePersistentState';
-import { DEFAULT_CURRENCY } from './config';
+import { DEFAULT_CURRENCY, PILOT_SLUG } from './config';
+import { DEMO_SEEDS } from './demoSeeds';
+import { DemoDataBanner } from './components/DemoDataBanner';
 import { StockList } from './components/StockList';
 import { FilterSheet } from './components/FilterSheet';
 import { AddSheet } from './components/AddSheet';
@@ -32,8 +34,10 @@ import { applyFilters, countActiveFilters } from './filterLogic';
 
 type Tab = 'stock' | 'sell' | 'offers';
 
+const demoSeed = DEMO_SEEDS[PILOT_SLUG];
+
 function App() {
-  const [items, setItems] = usePersistentState<StockItem[]>('items', []);
+  const [items, setItems] = usePersistentState<StockItem[]>('items', demoSeed?.items ?? []);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -64,7 +68,7 @@ function App() {
 
   const [bookings, setBookings] = usePersistentState<Booking[]>('bookings', []);
   const [bookingsOpen, setBookingsOpen] = useState(false);
-  const [sales, setSales] = usePersistentState<Sale[]>('sales', []);
+  const [sales, setSales] = usePersistentState<Sale[]>('sales', demoSeed?.sales ?? []);
 
   const cartChannelOptions = useMemo(() => {
     const names = new Set<string>();
@@ -229,6 +233,7 @@ function App() {
 
   return (
     <div className="max-w-[640px] mx-auto min-h-screen bg-cream-50 relative flex flex-col">
+      <DemoDataBanner />
       <div className={`flex-1 overflow-y-auto ${showCheckoutBar ? 'pb-6' : 'pb-2'}`}>
         {tab === 'stock' && (
           <StockList

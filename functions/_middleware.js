@@ -7,8 +7,14 @@ export async function onRequest(context) {
     return next();
   }
 
-  const expectedUser = env.APP_AUTH_USER;
-  const expectedPass = env.APP_AUTH_PASS;
+  // The three sales-demo pilots (/demo-fashion, /demo-craft, /demo-food —
+  // see src/config.ts DEMO_PILOT_SLUGS) get their own, separately shareable
+  // password instead of the real pilot password. They're shown to new,
+  // unknown prospects in a sales call and hold no real pilot data, so they
+  // don't need the same sensitivity as the rest of the app.
+  const isDemoPath = /^\/demo-(fashion|craft|food)(\/|$)/.test(url.pathname);
+  const expectedUser = isDemoPath ? env.DEMO_AUTH_USER : env.APP_AUTH_USER;
+  const expectedPass = isDemoPath ? env.DEMO_AUTH_PASS : env.APP_AUTH_PASS;
 
   const authHeader = request.headers.get('Authorization');
   if (authHeader) {
