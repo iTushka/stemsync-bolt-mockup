@@ -1,6 +1,4 @@
 import type { SalesChannel, Category } from './types';
-import type { TenantId } from './config';
-import { TENANT } from './config';
 
 interface AdCopyInput {
   name: string;
@@ -17,42 +15,6 @@ function styleForChannel(channel?: SalesChannel): Style {
   return /instagram|tiktok/i.test(channel.name) ? 'social' : 'general';
 }
 
-interface AdCopyText {
-  newLabel: string;
-  stockLine: (quantity: number) => string;
-  orderCta: string;
-  socialOrderCta: string;
-}
-
-/**
- * Wording only — not a translation layer. `jhums` (Jhum Fashion, Dhaka) gets
- * the casual, code-switched Bangla-English register small Bangladeshi
- * sellers actually post in on Facebook/WhatsApp (English loanwords like
- * "Stock"/"Order" kept as-is, not translated), instead of stiff, formally
- * translated Bangla. `general` stays English because that tenant also
- * covers non-Bangla pilots (e.g. Moja/Berlin).
- */
-const AD_COPY_TEXT_BY_TENANT: Record<TenantId, AdCopyText> = {
-  flowertot: {
-    newLabel: 'NEW: ',
-    stockLine: (q) => `Available now — ${q} in stock`,
-    orderCta: 'Message me to order!',
-    socialOrderCta: 'DM to grab yours!',
-  },
-  jhums: {
-    newLabel: 'New Stock: ',
-    stockLine: (q) => `Stock e ache — ${q} pcs`,
-    orderCta: 'Order korte message din!',
-    socialOrderCta: 'Order korte DM din!',
-  },
-  general: {
-    newLabel: 'NEW: ',
-    stockLine: (q) => `Available now — ${q} in stock`,
-    orderCta: 'Message me to order!',
-    socialOrderCta: 'DM to grab yours!',
-  },
-};
-
 /**
  * Builds ready-to-paste ad copy for a stock item — automatically adapting
  * tone depending on which channel it's for. "General" and marketplace-style
@@ -64,7 +26,6 @@ const AD_COPY_TEXT_BY_TENANT: Record<TenantId, AdCopyText> = {
 export function buildAdCopy(item: AdCopyInput, channel?: SalesChannel, currencySymbol = 'kr'): string {
   const price = channel?.price ?? item.salePrice;
   const style = styleForChannel(channel);
-  const text = AD_COPY_TEXT_BY_TENANT[TENANT];
 
   const hashtags = [
     ...(item.category ? [item.category] : []),
@@ -72,7 +33,7 @@ export function buildAdCopy(item: AdCopyInput, channel?: SalesChannel, currencyS
   ].map((t) => `#${t.replace(/\s+/g, '')}`);
 
   if (style === 'social') {
-    const lines: string[] = [`✨ ${item.name} ✨`, '', `${price} ${currencySymbol} — ${text.socialOrderCta} 📩`];
+    const lines: string[] = [`✨ ${item.name} ✨`, '', `${price} ${currencySymbol} — DM to grab yours! 📩`];
     if (hashtags.length > 0) {
       lines.push('', hashtags.join(' '));
     }
@@ -80,9 +41,9 @@ export function buildAdCopy(item: AdCopyInput, channel?: SalesChannel, currencyS
   }
 
   const lines: string[] = [
-    `✨ ${text.newLabel}${item.name} ✨`,
+    `✨ NEW: ${item.name} ✨`,
     '',
-    text.stockLine(item.quantity),
+    `Available now — ${item.quantity} in stock`,
     `💰 ${price} ${currencySymbol}${channel ? ` · ${channel.name}` : ''}`,
   ];
 
@@ -90,7 +51,7 @@ export function buildAdCopy(item: AdCopyInput, channel?: SalesChannel, currencyS
     lines.push('', item.tags.map((t) => `#${t.replace(/\s+/g, '')}`).join(' '));
   }
 
-  lines.push('', `${text.orderCta} 📩`);
+  lines.push('', 'Message me to order! 📩');
   return lines.join('\n');
 }
 
