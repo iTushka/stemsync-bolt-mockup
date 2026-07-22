@@ -22,6 +22,14 @@ import {
   MAX_MARKUP,
   type QualityTier,
 } from '../batchPricing';
+import {
+  CURRENCY_SYMBOLS,
+  availableCurrencies,
+  toLocal,
+  fromLocal,
+  type CurrencyCode,
+  type ExchangeRates,
+} from '../exchangeRates';
 
 interface AddSheetProps {
   open: boolean;
@@ -29,6 +37,7 @@ interface AddSheetProps {
   onSave: (item: Omit<StockItem, 'id' | 'createdAt'>) => void;
   simulateFreePlan?: boolean;
   currencySymbol?: string;
+  exchangeRates?: ExchangeRates;
 }
 
 const FREE_CHANNEL_LIMIT = 1;
@@ -51,7 +60,14 @@ const emptyDraft: Draft = {
 
 const CHANNEL_SUGGESTIONS = ['Facebook Marketplace', 'Gumtree', 'WhatsApp', 'Physical market', 'Instagram', 'TikTok'];
 
-export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, currencySymbol = 'kr' }: AddSheetProps) {
+export function AddSheet({
+  open,
+  onClose,
+  onSave,
+  simulateFreePlan = false,
+  currencySymbol = 'kr',
+  exchangeRates = {},
+}: AddSheetProps) {
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState<ParsedEntry | null>(null);
   const [showCard, setShowCard] = useState(false);
@@ -101,6 +117,38 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
   const [tierSaveSummary, setTierSaveSummary] = useState<
     { name: string; quantity: number; salePrice: number }[] | null
   >(null);
+
+  // "Paid in a different currency?" — converts a foreign-currency purchase
+  // into the seller's trading currency using her saved reference rate (see
+  // exchangeRates.ts), then writes the result into purchasePrice like any
+  // manually typed number. Mutually exclusive with batch mode, which already
+  // owns purchasePrice while it's on.
+  const [foreignPurchaseMode, setForeignPurchaseMode] = useState(false);
+  const [foreignAmount, setForeignAmount] = useState('');
+  const [foreignCurrency, setForeignCurrency] = useState<CurrencyCode | ''>('');
+
+  // "Show price in more currencies" — purely a display toggle next to the
+  // sale price; nothing here is ever written back into the draft.
+  const [showMultiCurrency, setShowMultiCurrency] = useState(false);
+
+  const availableCurrencyCodes = availableCurrencies(exchangeRates);
+  const foreignRate = foreignCurrency ? exchangeRates[foreignCurrency]?.rate : undefined;
+  const convertedLocalAmount =
+    foreignRate !== undefined && foreignAmount
+      ? toLocal(parseFloat(foreignAmount) || 0, foreignRate)
+      : undefined;
+
+  const applyForeignPurchase = () => {
+    if (convertedLocalAmount === undefined) return;
+    setDraft((d) => ({
+      ...d,
+      purchasePrice: convertedLocalAmount,
+      salePrice: salePriceTouched ? d.salePrice : suggestSalePrice(convertedLocalAmount, markup),
+    }));
+    setForeignPurchaseMode(false);
+    setForeignAmount('');
+    setForeignCurrency('');
+  };
 
   const reset = () => {
     setRawText('');
@@ -593,6 +641,60 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
                 </Field>
               </div>
 
+              {!batchMode && (
+                <div>
+                  <button
+                    onClick={() => setForeignPurchaseMode((v) => !v)}
+                    className="text-xs font-medium text-accent-600 hover:text-accent-700 transition"
+                  >
+                    {foreignPurchaseMode ? '− Paid in a different currency?' : '+ Paid in a different currency?'}
+                  </button>
+                  {foreignPurchaseMode && (
+                    availableCurrencyCodes.length === 0 ? (
+                      <p className="mt-1.5 text-[11px] text-stone-400 leading-snug">
+                        Add a rate in Settings first.
+                      </p>
+                    ) : (
+                      <div className="mt-2 space-y-2 animate-fadeIn">
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            value={foreignAmount}
+                            onChange={(e) => setForeignAmount(e.target.value)}
+                            placeholder="Amount"
+                            className="input"
+                          />
+                          <select
+                            value={foreignCurrency}
+                            onChange={(e) => setForeignCurrency(e.target.value as CurrencyCode | '')}
+                            className="input"
+                          >
+                            <option value="">Currency</option>
+                            {availableCurrencyCodes.map((code) => (
+                              <option key={code} value={code}>{code}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {convertedLocalAmount !== undefined && (
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs text-stone-500 leading-snug">
+                              ≈ {currencySymbol}{convertedLocalAmount.toFixed(2)} based on your saved rate
+                            </p>
+                            <button
+                              onClick={applyForeignPurchase}
+                              className="shrink-0 px-3 py-1.5 rounded-full bg-accent-500 text-white text-xs font-semibold active:scale-95 transition"
+                            >
+                              Use this
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Markup (× cost)">
                   <input
@@ -635,6 +737,27 @@ export function AddSheet({ open, onClose, onSave, simulateFreePlan = false, curr
                       {m < 30 && <AlertTriangle size={12} />}
                       {m}% margin
                       {m >= 50 ? ' — looks good' : m >= 30 ? ' — a bit thin' : ' — below your usual margin'}
+                    </p>
+                  )}
+                  {availableCurrencyCodes.length > 0 && (
+                    <button
+                      onClick={() => setShowMultiCurrency((v) => !v)}
+                      className="mt-1.5 text-[11px] font-medium text-accent-600 hover:text-accent-700 transition"
+                    >
+                      {showMultiCurrency ? '− Hide other currencies' : 'Show price in more currencies'}
+                    </button>
+                  )}
+                  {showMultiCurrency && draft.salePrice > 0 && availableCurrencyCodes.length > 0 && (
+                    <p className="mt-1 text-[11px] text-stone-400">
+                      ≈{' '}
+                      {availableCurrencyCodes
+                        .map((code) => {
+                          const rate = exchangeRates[code]?.rate;
+                          if (rate === undefined) return null;
+                          return `${CURRENCY_SYMBOLS[code]}${fromLocal(draft.salePrice, rate).toFixed(0)}`;
+                        })
+                        .filter(Boolean)
+                        .join(' · ')}
                     </p>
                   )}
                 </Field>

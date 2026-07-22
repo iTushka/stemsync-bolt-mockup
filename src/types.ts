@@ -1,3 +1,5 @@
+import type { ExchangeRates } from './exchangeRates';
+
 export type Category =
   | 'Foliage'
   | 'Flowering'
@@ -112,6 +114,11 @@ export interface AppSettings {
   contactInfo: string;
   language: string;
   simulateFreePlan: boolean;
+  /** Manually entered reference rates for converting to/from foreign
+   *  currencies — see exchangeRates.ts. Optional per currency; a returning
+   *  user's persisted settings predate this field, so always read it as
+   *  `settings.exchangeRates ?? {}` rather than assuming it's present. */
+  exchangeRates: ExchangeRates;
 }
 
 export const defaultSettings: AppSettings = {
@@ -120,6 +127,7 @@ export const defaultSettings: AppSettings = {
   contactInfo: '',
   language: 'English',
   simulateFreePlan: false,
+  exchangeRates: {},
 };
 
 export type TeamRole = 'Owner' | 'Staff';

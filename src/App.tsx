@@ -300,6 +300,7 @@ function App() {
         onSave={handleSave}
         simulateFreePlan={settings.simulateFreePlan}
         currencySymbol={settings.currencySymbol}
+        exchangeRates={settings.exchangeRates}
       />
       <WhatsAppCardSheet open={whatsAppCardOpen} onClose={() => setWhatsAppCardOpen(false)} />
       <AddCustomerSheet

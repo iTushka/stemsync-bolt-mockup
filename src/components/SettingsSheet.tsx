@@ -3,6 +3,7 @@ import { Plus, Trash2, RotateCcw, Download, Upload } from 'lucide-react';
 import { Sheet } from './Sheet';
 import { clearTenantStorage, exportTenantData, importTenantData } from '../usePersistentState';
 import type { AppSettings, TeamUser } from '../types';
+import { REFERENCE_CURRENCIES, daysSinceUpdate, isRateStale, type CurrencyCode } from '../exchangeRates';
 
 interface SettingsSheetProps {
   open: boolean;
@@ -42,6 +43,19 @@ export function SettingsSheet({
   };
 
   const update = (patch: Partial<AppSettings>) => onChange({ ...settings, ...patch });
+
+  const exchangeRates = settings.exchangeRates ?? {};
+
+  const updateRate = (code: CurrencyCode, rawValue: string) => {
+    const nextRates = { ...exchangeRates };
+    const num = parseFloat(rawValue);
+    if (!rawValue.trim() || isNaN(num) || num <= 0) {
+      delete nextRates[code];
+    } else {
+      nextRates[code] = { rate: num, updatedAt: Date.now() };
+    }
+    update({ exchangeRates: nextRates });
+  };
 
   const addUser = () => {
     if (!newUserName.trim()) return;
@@ -198,6 +212,55 @@ export function SettingsSheet({
               />
             </span>
           </button>
+        </div>
+
+        <div className="pt-2 border-t border-stone-100">
+          <span className="block text-xs font-medium text-stone-500 mb-2">
+            Reference exchange rates
+          </span>
+          <p className="mb-2 text-[11px] text-stone-400 leading-snug">
+            Optional — fill in only the currencies you actually deal with. Entered by hand;
+            nothing is fetched automatically. Converts to/from your trading currency (
+            {settings.currencySymbol}).
+          </p>
+          <div className="space-y-1.5">
+            {REFERENCE_CURRENCIES.map((code) => {
+              const entry = exchangeRates[code];
+              const days = entry ? daysSinceUpdate(entry.updatedAt) : 0;
+              return (
+                <div
+                  key={code}
+                  className="rounded-xl border border-stone-200 bg-white px-3 py-2.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-16 shrink-0 text-sm font-semibold text-stone-700">
+                      1 {code} =
+                    </span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step={0.01}
+                      value={entry?.rate ?? ''}
+                      onChange={(e) => updateRate(code, e.target.value)}
+                      placeholder="e.g. 123.50"
+                      className="input flex-1"
+                    />
+                    <span className="w-6 shrink-0 text-sm text-stone-500">
+                      {settings.currencySymbol}
+                    </span>
+                  </div>
+                  {entry && (
+                    <p className="mt-1 text-[11px] text-stone-400">
+                      Updated {days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`}
+                      {isRateStale(entry.updatedAt) && (
+                        <span className="text-amber-600"> — worth checking the latest rate?</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div className="pt-2 border-t border-stone-100">
