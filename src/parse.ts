@@ -256,8 +256,17 @@ export function parseEntry(text: string): ParsedEntry {
   if (foundChannels.length > 0) result.channels = foundChannels;
 
   // --- Whatever's left over is the name -----------------------------------
+  // Only strip connector words ("on", "via", "and", "at", "for", "of") when
+  // they're leftover debris at the very start/end of the string — e.g. "on"
+  // dangling after a channel phrase was cut out, or "for" dangling after a
+  // price phrase was cut out. A global mid-string strip here previously ate
+  // these same words wherever they occurred, including inside real product
+  // names ("stings and pearls" -> "stings pearls", "Bird of paradise" ->
+  // "Bird paradise") — this must never happen, since those words were
+  // actually typed by the seller and aren't extraction artifacts.
   const name = cleaned
-    .replace(/\b(on|via|and|at|for|of)\b/gi, ' ')
+    .replace(/^(?:\s*\b(?:on|via|and|at|for|of)\b\s*)+/i, '')
+    .replace(/(?:\s*\b(?:on|via|and|at|for|of)\b\s*)+$/i, '')
     .replace(/\s*,\s*(?=$|,)/g, ' ')
     .replace(/^[\s,.-]+|[\s,.-]+$/g, '')
     .replace(/\s{2,}/g, ' ')
