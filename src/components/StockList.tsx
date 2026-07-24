@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Search, SlidersHorizontal, Plus, Clock, Package2 } from 'lucide-react';
 import type { StockItem, Sale, TeamUser } from '../types';
 import { margin } from '../types';
@@ -6,6 +7,9 @@ import { InsightBar } from './InsightBar';
 import { stockInsights } from '../insights';
 import { EarningsStrip } from './EarningsStrip';
 import { ShareAccountHint } from './ShareAccountHint';
+import { DemoCurrencySwitcher } from './DemoCurrencySwitcher';
+import { isDemoPilot, PILOT_SLUG } from '../config';
+import { fromLocal, CURRENCY_SYMBOLS, type CurrencyCode, type ExchangeRates } from '../exchangeRates';
 
 interface StockListProps {
   items: StockItem[];
@@ -19,12 +23,14 @@ interface StockListProps {
   onSearch: (q: string) => void;
   onOpenFilters: () => void;
   onAdd: () => void;
+  onEditItem: (item: StockItem) => void;
   onGetWhatsAppCard: () => void;
   onAddCustomer: () => void;
   onOpenSettings: () => void;
   onOpenBookings: () => void;
   onOpenAging: (item: StockItem) => void;
   currencySymbol: string;
+  exchangeRates: ExchangeRates;
 }
 
 const AGING_ACTION_LABEL: Record<NonNullable<StockItem['agingAction']>, string> = {
@@ -44,19 +50,27 @@ export function StockList({
   onSearch,
   onOpenFilters,
   onAdd,
+  onEditItem,
   onGetWhatsAppCard,
   onAddCustomer,
   onOpenSettings,
   onOpenBookings,
   onOpenAging,
   currencySymbol,
+  exchangeRates,
 }: StockListProps) {
+  const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode | 'native'>('native');
+
   const menuItems = [
     { label: 'Bookings', onClick: onOpenBookings },
     { label: 'Export', onClick: () => {} },
     { label: 'Import', onClick: () => {} },
     { label: 'Saved weekly lists', onClick: () => {} },
   ];
+
+  const rate = displayCurrency === 'native' ? undefined : exchangeRates[displayCurrency]?.rate;
+  const displaySymbol = rate !== undefined ? CURRENCY_SYMBOLS[displayCurrency as CurrencyCode] : currencySymbol;
+  const convertPrice = (amount: number) => (rate !== undefined ? fromLocal(amount, rate) : amount);
 
   return (
     <div className="relative min-h-screen pb-24">
@@ -69,12 +83,22 @@ export function StockList({
               {activeCount}
             </span>
           </div>
-          <HeaderIconButtons
-            onGetWhatsAppCard={onGetWhatsAppCard}
-            onAddCustomer={onAddCustomer}
-            onOpenSettings={onOpenSettings}
-            moreMenuItems={menuItems}
-          />
+          <div className="flex items-center gap-2">
+            {isDemoPilot(PILOT_SLUG) && (
+              <DemoCurrencySwitcher
+                nativeSymbol={currencySymbol}
+                exchangeRates={exchangeRates}
+                value={displayCurrency}
+                onChange={setDisplayCurrency}
+              />
+            )}
+            <HeaderIconButtons
+              onGetWhatsAppCard={onGetWhatsAppCard}
+              onAddCustomer={onAddCustomer}
+              onOpenSettings={onOpenSettings}
+              moreMenuItems={menuItems}
+            />
+          </div>
         </div>
       </div>
 
@@ -121,7 +145,14 @@ export function StockList({
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {items.map((item) => (
-              <StockCard key={item.id} item={item} currencySymbol={currencySymbol} onOpenAging={onOpenAging} />
+              <StockCard
+                key={item.id}
+                item={item}
+                currencySymbol={displaySymbol}
+                displaySalePrice={convertPrice(item.salePrice)}
+                onOpenAging={onOpenAging}
+                onEdit={onEditItem}
+              />
             ))}
           </div>
         )}
@@ -142,15 +173,22 @@ export function StockList({
 function StockCard({
   item,
   currencySymbol,
+  displaySalePrice,
   onOpenAging,
+  onEdit,
 }: {
   item: StockItem;
   currencySymbol: string;
+  displaySalePrice: number;
   onOpenAging: (item: StockItem) => void;
+  onEdit: (item: StockItem) => void;
 }) {
   const m = margin(item.purchasePrice, item.salePrice);
   return (
-    <div className="bg-white rounded-2xl shadow-card overflow-hidden hover:shadow-cardHover transition-shadow">
+    <button
+      onClick={() => onEdit(item)}
+      className="w-full text-left bg-white rounded-2xl shadow-card overflow-hidden hover:shadow-cardHover active:scale-[0.98] transition"
+    >
       <div className="relative aspect-square bg-gradient-to-br from-cream-100 to-stone-100">
         {item.imageUrl ? (
           <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
@@ -168,7 +206,10 @@ function StockCard({
         ) : (
           item.aging && (
             <button
-              onClick={() => onOpenAging(item)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenAging(item);
+              }}
               className="absolute top-2 right-2 w-7 h-7 rounded-full bg-amber-100/95 flex items-center justify-center hover:bg-amber-200 active:scale-90 transition"
               title="Aging stock — tap for options"
               aria-label="Aging stock — tap for options"
@@ -198,11 +239,13 @@ function StockCard({
             <span className="text-xs text-stone-400 ml-1">pcs</span>
           </div>
           <div className="text-right">
-            <div className="text-sm font-semibold text-stone-900">{item.salePrice} {currencySymbol}</div>
+            <div className="text-sm font-semibold text-stone-900">
+              {displaySalePrice.toFixed(displaySalePrice % 1 === 0 ? 0 : 2)} {currencySymbol}
+            </div>
             <div className="text-[10px] text-stone-400">{m}% margin</div>
           </div>
         </div>
       </div>
-    </div>
+    </button>
   );
 }

@@ -42,6 +42,7 @@ function App() {
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [filterOpen, setFilterOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<StockItem | null>(null);
   const [tab, setTab] = useState<Tab>('stock');
 
   const [customers, setCustomers] = usePersistentState<Customer[]>('customers', []);
@@ -51,6 +52,7 @@ function App() {
   const [settings, setSettings] = usePersistentState<AppSettings>('settings', {
     ...defaultSettings,
     currencySymbol: DEFAULT_CURRENCY,
+    exchangeRates: demoSeed?.exchangeRates ?? {},
   });
   const [team, setTeam] = usePersistentState<TeamUser[]>('team', [
     { id: 'owner', name: 'You', role: 'Owner' },
@@ -100,6 +102,19 @@ function App() {
       createdAt: Date.now(),
     };
     setItems((prev) => [newItem, ...prev]);
+  };
+
+  const handleUpdateItem = (updated: StockItem) => {
+    setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+  };
+
+  const handleDeleteItem = (id: string) => {
+    setItems((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const closeAddSheet = () => {
+    setAddOpen(false);
+    setEditingItem(null);
   };
 
   const handleSaveCustomer = (customer: Omit<Customer, 'id' | 'addedAt'>) => {
@@ -246,12 +261,14 @@ function App() {
             onSearch={setSearch}
             onOpenFilters={() => setFilterOpen(true)}
             onAdd={() => setAddOpen(true)}
+            onEditItem={(item) => setEditingItem(item)}
             onGetWhatsAppCard={() => setWhatsAppCardOpen(true)}
             onAddCustomer={() => setAddCustomerOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenBookings={() => setBookingsOpen(true)}
             onOpenAging={(item) => setAgingItem(item)}
             currencySymbol={settings.currencySymbol}
+            exchangeRates={settings.exchangeRates ?? {}}
           />
         )}
         {tab === 'sell' && (
@@ -300,9 +317,12 @@ function App() {
         onApply={setFilters}
       />
       <AddSheet
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
+        open={addOpen || editingItem !== null}
+        onClose={closeAddSheet}
         onSave={handleSave}
+        editItem={editingItem}
+        onUpdate={handleUpdateItem}
+        onDelete={handleDeleteItem}
         simulateFreePlan={settings.simulateFreePlan}
         currencySymbol={settings.currencySymbol}
         exchangeRates={settings.exchangeRates}

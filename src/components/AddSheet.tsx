@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Mic, MicOff, Sparkles, Plus, Trash2, Check, Camera, AlertTriangle, Copy, CheckCircle2, ImagePlus, Calculator, Layers } from 'lucide-react';
 import type { StockItem, Category, SalesChannel } from '../types';
 import { margin } from '../types';
@@ -35,6 +35,10 @@ interface AddSheetProps {
   open: boolean;
   onClose: () => void;
   onSave: (item: Omit<StockItem, 'id' | 'createdAt'>) => void;
+  /** Present only in edit mode — the item being edited. */
+  editItem?: StockItem | null;
+  onUpdate?: (item: StockItem) => void;
+  onDelete?: (id: string) => void;
   simulateFreePlan?: boolean;
   currencySymbol?: string;
   exchangeRates?: ExchangeRates;
@@ -76,6 +80,9 @@ export function AddSheet({
   open,
   onClose,
   onSave,
+  editItem = null,
+  onUpdate,
+  onDelete,
   simulateFreePlan = false,
   currencySymbol = 'kr',
   exchangeRates = {},
@@ -97,6 +104,7 @@ export function AddSheet({
   const [copied, setCopied] = useState(false);
   const [photoStep, setPhotoStep] = useState(false);
   const [pendingImageUrl, setPendingImageUrl] = useState<string | undefined>();
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cardFileInputRef = useRef<HTMLInputElement>(null);
   const tenantCategories = CATEGORIES_BY_TENANT[TENANT];
@@ -150,6 +158,37 @@ export function AddSheet({
   // sale price; nothing here is ever written back into the draft.
   const [showMultiCurrency, setShowMultiCurrency] = useState(false);
 
+  // Edit mode — jump straight to the editable card, prefilled from the
+  // existing item, instead of the free-text/photo entry steps that only
+  // make sense when creating something new. salePriceTouched is set so
+  // editing purchase price never silently overwrites a sale price the
+  // seller already chose.
+  useEffect(() => {
+    if (open && editItem) {
+      setDraft({
+        name: editItem.name,
+        category: editItem.category,
+        quantity: editItem.quantity,
+        purchasePrice: editItem.purchasePrice,
+        salePrice: editItem.salePrice,
+        supplier: editItem.supplier ?? '',
+        tags: editItem.tags,
+        imageUrl: editItem.imageUrl,
+        environment: editItem.environment,
+        channels: editItem.channels,
+        aging: editItem.aging,
+        soldOut: editItem.soldOut,
+        agingAction: editItem.agingAction,
+        agingActionNote: editItem.agingActionNote,
+      });
+      setParsed(null);
+      setShowCard(true);
+      setSavedStep(false);
+      setSalePriceTouched(true);
+      setDeleteConfirmOpen(false);
+    }
+  }, [open, editItem]);
+
   const availableCurrencyCodes = availableCurrencies(exchangeRates);
   const foreignRate = foreignCurrency ? exchangeRates[foreignCurrency]?.rate : undefined;
   const convertedLocalAmount =
@@ -195,6 +234,7 @@ export function AddSheet({
     setTiersEnabled(false);
     setTiers([]);
     setTierSaveSummary(null);
+    setDeleteConfirmOpen(false);
   };
 
   const handleClose = () => {
@@ -330,6 +370,11 @@ export function AddSheet({
   };
 
   const handleSave = () => {
+    if (editItem) {
+      onUpdate?.({ ...editItem, ...draft });
+      handleClose();
+      return;
+    }
     if (tiersEnabled && batchMode) {
       const validTiers = tiers.filter((t) => t.label.trim() && t.quantity > 0);
       validTiers.forEach((tier) => {
@@ -361,6 +406,11 @@ export function AddSheet({
   const handleDone = () => {
     reset();
     onClose();
+  };
+
+  const handleDelete = () => {
+    if (editItem) onDelete?.(editItem.id);
+    handleClose();
   };
 
   const selectedChannel: SalesChannel | undefined =
@@ -403,7 +453,7 @@ export function AddSheet({
   return (
     <Sheet open={open} onClose={handleClose} maxHeight="94vh">
       <div className="flex items-center justify-between px-5 py-2 shrink-0">
-        <h2 className="text-lg font-bold text-stone-900">Add item</h2>
+        <h2 className="text-lg font-bold text-stone-900">{editItem ? 'Edit item' : 'Add item'}</h2>
         <button onClick={handleClose} className="w-8 h-8 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-100">
           <X size={20} />
         </button>
@@ -533,7 +583,7 @@ export function AddSheet({
                 <AiBadge text="Parsed from your text — adjust if it's not quite right." />
               </div>
             )}
-            {!parsed && draft.imageUrl && (
+            {!parsed && !editItem && draft.imageUrl && (
               <div className="mb-3">
                 <AiBadge text="Category set from your photo — the fields below adjust to match it." />
               </div>
@@ -1266,13 +1316,45 @@ export function AddSheet({
               Done
             </button>
           ) : (
-            <button
-              onClick={handleSave}
-              disabled={!draft.name.trim()}
-              className="w-full h-12 rounded-full bg-accent-500 text-white font-semibold text-sm shadow-fab hover:bg-accent-600 active:scale-[0.98] transition disabled:opacity-40 disabled:shadow-none"
-            >
-              Save
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={handleSave}
+                disabled={!draft.name.trim()}
+                className="w-full h-12 rounded-full bg-accent-500 text-white font-semibold text-sm shadow-fab hover:bg-accent-600 active:scale-[0.98] transition disabled:opacity-40 disabled:shadow-none"
+              >
+                {editItem ? 'Save changes' : 'Save'}
+              </button>
+              {editItem && (
+                deleteConfirmOpen ? (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 space-y-2 animate-fadeIn">
+                    <p className="text-xs text-red-700 leading-snug">
+                      Delete "{editItem.name}"? This can't be undone.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDelete}
+                        className="flex-1 h-9 rounded-full bg-red-500 text-white text-xs font-semibold active:scale-95 transition"
+                      >
+                        Yes, delete
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirmOpen(false)}
+                        className="flex-1 h-9 rounded-full bg-white border border-stone-200 text-xs font-medium text-stone-600 active:scale-95 transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setDeleteConfirmOpen(true)}
+                    className="w-full h-9 text-xs font-medium text-red-600 hover:text-red-700 transition"
+                  >
+                    Delete item
+                  </button>
+                )
+              )}
+            </div>
           )}
         </div>
       )}
