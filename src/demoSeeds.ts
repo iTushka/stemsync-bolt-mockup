@@ -1,5 +1,6 @@
 import type { PilotSlug } from './config';
 import type { Sale, StockItem } from './types';
+import type { ExchangeRates } from './exchangeRates';
 
 /**
  * Fictional seed data for the three sales-demo pilots (see config.ts,
@@ -15,10 +16,30 @@ import type { Sale, StockItem } from './types';
 export interface DemoSeed {
   items: StockItem[];
   sales: Sale[];
+  /** Prefilled reference rates for the demo currency switcher (see
+   *  DemoCurrencySwitcher.tsx) — same "manually entered, never fetched"
+   *  rates a real seller would type into Settings herself, just seeded up
+   *  front so a sales call never needs to pause and type them in. */
+  exchangeRates?: ExchangeRates;
 }
 
 const now = Date.now();
 const day = 86400000;
+
+// Approximate, manually-set reference rates — not live rates. Demo tenants
+// trading in ৳ (demo-fashion, demo-craft) get €/$/£; demo-food (€) gets
+// $/£/৳ — matching the four currencies the demo switcher offers.
+const bdtBaseExchangeRates: ExchangeRates = {
+  USD: { rate: 122, updatedAt: now },
+  GBP: { rate: 155, updatedAt: now },
+  EUR: { rate: 132, updatedAt: now },
+};
+
+const eurBaseExchangeRates: ExchangeRates = {
+  USD: { rate: 0.92, updatedAt: now },
+  GBP: { rate: 1.17, updatedAt: now },
+  BDT: { rate: 0.0076, updatedAt: now },
+};
 
 // demo-fashion — mirrors Jhum Fashion: clothing/textile, bundle-bought
 // stock, BDT pricing for a Bangladeshi diaspora audience.
@@ -523,7 +544,7 @@ const demoFoodSales: Sale[] = [
 ];
 
 export const DEMO_SEEDS: Partial<Record<PilotSlug, DemoSeed>> = {
-  'demo-fashion': { items: demoFashionItems, sales: demoFashionSales },
-  'demo-craft': { items: demoCraftItems, sales: demoCraftSales },
-  'demo-food': { items: demoFoodItems, sales: demoFoodSales },
+  'demo-fashion': { items: demoFashionItems, sales: demoFashionSales, exchangeRates: bdtBaseExchangeRates },
+  'demo-craft': { items: demoCraftItems, sales: demoCraftSales, exchangeRates: bdtBaseExchangeRates },
+  'demo-food': { items: demoFoodItems, sales: demoFoodSales, exchangeRates: eurBaseExchangeRates },
 };

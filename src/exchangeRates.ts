@@ -1,6 +1,6 @@
-export type CurrencyCode = 'USD' | 'GBP' | 'EUR' | 'CAD' | 'AUD' | 'CNH';
+export type CurrencyCode = 'USD' | 'GBP' | 'EUR' | 'CAD' | 'AUD' | 'CNH' | 'BDT';
 
-export const REFERENCE_CURRENCIES: CurrencyCode[] = ['USD', 'GBP', 'EUR', 'CAD', 'AUD', 'CNH'];
+export const REFERENCE_CURRENCIES: CurrencyCode[] = ['USD', 'GBP', 'EUR', 'CAD', 'AUD', 'CNH', 'BDT'];
 
 export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   USD: '$',
@@ -9,6 +9,7 @@ export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   CAD: 'C$',
   AUD: 'A$',
   CNH: '¥',
+  BDT: '৳',
 };
 
 /**
