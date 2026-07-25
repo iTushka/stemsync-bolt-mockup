@@ -28,6 +28,7 @@ interface StockListProps {
   onAddCustomer: () => void;
   onOpenSettings: () => void;
   onOpenBookings: () => void;
+  onOpenDebts: () => void;
   onOpenAging: (item: StockItem) => void;
   currencySymbol: string;
   exchangeRates: ExchangeRates;
@@ -55,6 +56,7 @@ export function StockList({
   onAddCustomer,
   onOpenSettings,
   onOpenBookings,
+  onOpenDebts,
   onOpenAging,
   currencySymbol,
   exchangeRates,
@@ -63,6 +65,7 @@ export function StockList({
 
   const menuItems = [
     { label: 'Bookings', onClick: onOpenBookings },
+    { label: 'Customer বাকি', onClick: onOpenDebts },
     { label: 'Export', onClick: () => {} },
     { label: 'Import', onClick: () => {} },
     { label: 'Saved weekly lists', onClick: () => {} },

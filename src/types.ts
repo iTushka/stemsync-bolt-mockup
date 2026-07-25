@@ -92,11 +92,39 @@ export function margin(purchase: number, sale: number): number {
   return Math.round(((sale - purchase) / sale) * 100);
 }
 
+/**
+ * A single owed amount (বাকি) against a customer. A customer can rack up
+ * several of these over time — e.g. one tab from a market-stall sale, a
+ * separate one from a WhatsApp order — so debts live as a list on the
+ * customer rather than being a single running balance.
+ */
+export interface CustomerDebt {
+  id: string;
+  amount: number;
+  /** Free text, e.g. what the debt is for. */
+  note?: string;
+  createdAt: number;
+  /** Optional day to follow up — drives both the sort order in the বাকি
+   *  list and the .ics reminder. */
+  followUpDate?: number;
+  /** How many times a WhatsApp reminder has been sent for this debt — picks
+   *  which of the fixed message templates shows next (softer to firmer). */
+  reminderCount: number;
+  /** null/undefined = still unpaid. Set once, never un-set — "mark as paid"
+   *  is a one-way action, not editable bookkeeping. */
+  settledAt?: number | null;
+}
+
 export interface Customer {
   id: string;
   name: string;
   consented: boolean;
   addedAt: number;
+  /** Needed to build the wa.me reminder link — optional because a customer
+   *  can be added (e.g. from a market-stall conversation) before their
+   *  number is known, and filled in later from the বাকি sheet. */
+  phone?: string;
+  debts: CustomerDebt[];
 }
 
 export interface Bundle {

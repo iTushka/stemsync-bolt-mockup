@@ -17,12 +17,14 @@ import { AddCustomerSheet } from './components/AddCustomerSheet';
 import { SettingsSheet } from './components/SettingsSheet';
 import { QuoteCard } from './components/QuoteCard';
 import { BookingsSheet } from './components/BookingsSheet';
+import { CustomerDebtsSheet } from './components/CustomerDebtsSheet';
 import {
   emptyFilters,
   defaultSettings,
   type StockItem,
   type Filters,
   type Customer,
+  type CustomerDebt,
   type Bundle,
   type AppSettings,
   type TeamUser,
@@ -48,6 +50,7 @@ function App() {
   const [customers, setCustomers] = usePersistentState<Customer[]>('customers', []);
   const [whatsAppCardOpen, setWhatsAppCardOpen] = useState(false);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  const [debtsOpen, setDebtsOpen] = useState(false);
 
   const [settings, setSettings] = usePersistentState<AppSettings>('settings', {
     ...defaultSettings,
@@ -124,6 +127,56 @@ function App() {
       addedAt: Date.now(),
     };
     setCustomers((prev) => [newCustomer, ...prev]);
+  };
+
+  const handleAddDebt = (
+    customerId: string,
+    debt: Omit<CustomerDebt, 'id' | 'createdAt' | 'reminderCount' | 'settledAt'>
+  ) => {
+    const newDebt: CustomerDebt = {
+      ...debt,
+      id: Math.random().toString(36).slice(2, 9),
+      createdAt: Date.now(),
+      reminderCount: 0,
+      settledAt: null,
+    };
+    setCustomers((prev) =>
+      prev.map((c) => (c.id === customerId ? { ...c, debts: [newDebt, ...c.debts] } : c))
+    );
+  };
+
+  const handleSettleDebt = (customerId: string, debtId: string) => {
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === customerId
+          ? {
+              ...c,
+              debts: c.debts.map((d) => (d.id === debtId ? { ...d, settledAt: Date.now() } : d)),
+            }
+          : c
+      )
+    );
+  };
+
+  const handleReminderSent = (customerId: string, debtId: string) => {
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === customerId
+          ? {
+              ...c,
+              debts: c.debts.map((d) =>
+                d.id === debtId ? { ...d, reminderCount: d.reminderCount + 1 } : d
+              ),
+            }
+          : c
+      )
+    );
+  };
+
+  const handleUpdateCustomerPhone = (customerId: string, phone: string) => {
+    setCustomers((prev) =>
+      prev.map((c) => (c.id === customerId ? { ...c, phone: phone.trim() || undefined } : c))
+    );
   };
 
   const handleSaveBundle = (bundle: Omit<Bundle, 'id' | 'createdAt'>) => {
@@ -266,6 +319,7 @@ function App() {
             onAddCustomer={() => setAddCustomerOpen(true)}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenBookings={() => setBookingsOpen(true)}
+            onOpenDebts={() => setDebtsOpen(true)}
             onOpenAging={(item) => setAgingItem(item)}
             currencySymbol={settings.currencySymbol}
             exchangeRates={settings.exchangeRates ?? {}}
@@ -380,6 +434,16 @@ function App() {
         currencySymbol={settings.currencySymbol}
         onAddBooking={handleAddBooking}
         onStartVisit={handleStartVisit}
+      />
+      <CustomerDebtsSheet
+        open={debtsOpen}
+        onClose={() => setDebtsOpen(false)}
+        customers={customers}
+        currencySymbol={settings.currencySymbol}
+        onAddDebt={handleAddDebt}
+        onSettleDebt={handleSettleDebt}
+        onReminderSent={handleReminderSent}
+        onUpdateCustomerPhone={handleUpdateCustomerPhone}
       />
     </div>
   );

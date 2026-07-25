@@ -13,12 +13,14 @@ interface AddCustomerSheetProps {
 export function AddCustomerSheet({ open, onClose, onSave }: AddCustomerSheetProps) {
   const [raw, setRaw] = useState('');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [consented, setConsented] = useState(false);
   const [parsed, setParsed] = useState(false);
 
   const reset = () => {
     setRaw('');
     setName('');
+    setPhone('');
     setConsented(false);
     setParsed(false);
   };
@@ -37,7 +39,7 @@ export function AddCustomerSheet({ open, onClose, onSave }: AddCustomerSheetProp
 
   const handleSave = () => {
     if (!name.trim()) return;
-    onSave({ name: name.trim(), consented });
+    onSave({ name: name.trim(), consented, phone: phone.trim() || undefined, debts: [] });
     reset();
     onClose();
   };
@@ -84,6 +86,17 @@ export function AddCustomerSheet({ open, onClose, onSave }: AddCustomerSheetProp
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Customer name"
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="block text-xs font-medium text-stone-500 mb-1">
+                WhatsApp number (optional — needed to send বাকি reminders later)
+              </span>
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="e.g. +880 1XXX XXXXXX"
                 className="input"
               />
             </label>
