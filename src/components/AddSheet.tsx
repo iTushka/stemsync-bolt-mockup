@@ -602,6 +602,48 @@ export function AddSheet({
                 />
               </Field>
 
+              <Field label="Image">
+                <input
+                  ref={cardFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        if (typeof reader.result === 'string') {
+                          setDraft((d) => ({ ...d, imageUrl: reader.result as string }));
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                    e.target.value = '';
+                  }}
+                />
+                {draft.imageUrl ? (
+                  <button
+                    onClick={() => cardFileInputRef.current?.click()}
+                    className="w-full aspect-square max-h-32 rounded-xl overflow-hidden border border-stone-200 relative group"
+                  >
+                    <img src={draft.imageUrl} alt="" className="w-full h-full object-cover" />
+                    <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center text-white text-xs font-medium opacity-0 group-hover:opacity-100 transition">
+                      Change photo
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => cardFileInputRef.current?.click()}
+                    className="w-full aspect-square max-h-32 rounded-xl border-2 border-dashed border-stone-200 flex flex-col items-center justify-center text-stone-400 hover:border-accent-300 hover:text-accent-500 transition"
+                  >
+                    <Camera size={22} />
+                    <span className="text-xs mt-1.5">Upload image</span>
+                  </button>
+                )}
+              </Field>
+
               {/* Batch/tray purchase toggle */}
               <button
                 onClick={handleToggleBatchMode}
@@ -1012,48 +1054,6 @@ export function AddSheet({
                     placeholder="Type a tag + Enter"
                     className="input"
                   />
-                </Field>
-
-                <Field label="Image">
-                  <input
-                    ref={cardFileInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                          if (typeof reader.result === 'string') {
-                            setDraft((d) => ({ ...d, imageUrl: reader.result as string }));
-                          }
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                      e.target.value = '';
-                    }}
-                  />
-                  {draft.imageUrl ? (
-                    <button
-                      onClick={() => cardFileInputRef.current?.click()}
-                      className="w-full aspect-square max-h-32 rounded-xl overflow-hidden border border-stone-200 relative group"
-                    >
-                      <img src={draft.imageUrl} alt="" className="w-full h-full object-cover" />
-                      <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center text-white text-xs font-medium opacity-0 group-hover:opacity-100 transition">
-                        Change photo
-                      </span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => cardFileInputRef.current?.click()}
-                      className="w-full aspect-square max-h-32 rounded-xl border-2 border-dashed border-stone-200 flex flex-col items-center justify-center text-stone-400 hover:border-accent-300 hover:text-accent-500 transition"
-                    >
-                      <Camera size={22} />
-                      <span className="text-xs mt-1.5">Upload image</span>
-                    </button>
-                  )}
                 </Field>
 
                 {/* Sales channels — dynamic list */}
