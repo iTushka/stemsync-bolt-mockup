@@ -28,50 +28,109 @@ export type PilotSlug =
   | 'demo-food';
 
 /**
- * The three sales-demo slugs (see demoSeeds.ts) — fictional, pre-seeded
- * instances shown manually to new prospects during a sales call, one per
- * industry profile: demo-fashion mirrors Jhum Fashion (clothing, batch
- * variation), demo-craft mirrors Tahmina/Shoilee (jewellery, multi-part
- * material cost), demo-food mirrors Maliha/Moja (food, small batches).
- * Never linked to real pilot data — separate storage namespace like any
- * other PILOT_SLUG.
+ * Single source of truth for everything that varies per pilot instance.
+ * Replaces what used to be three separate mappings (TENANT_BY_PILOT_SLUG,
+ * CURRENCY_BY_PILOT_SLUG, DEMO_PILOT_SLUGS) — adding a pilot means adding
+ * one entry here instead of touching several.
+ *
+ * Note `tenant` and `slug` are deliberately different axes (see comment at
+ * top of file): several slugs can share one `tenant`'s category config.
+ *
+ * `isDemo` intentionally does NOT mean "password-protected" — real access
+ * control lives entirely in `_middleware.js` (Cloudflare Basic Auth env
+ * vars, its own isDemoPath check), decoupled from this file. Here it only
+ * decides the demo-data banner, the "reset to demo data" button wording,
+ * and whether the demo currency switcher shows.
  */
-export const DEMO_PILOT_SLUGS: PilotSlug[] = ['demo-fashion', 'demo-craft', 'demo-food'];
-
-export function isDemoPilot(slug: PilotSlug): boolean {
-  return (DEMO_PILOT_SLUGS as string[]).includes(slug);
+export interface TenantConfig {
+  slug: PilotSlug;
+  /** Internal reference only — never shown in the app UI. */
+  displayName: string;
+  /** Which shared category-tenant this slug's UI/keywords/copy uses. */
+  tenant: TenantId;
+  currency: string;
+  isDemo: boolean;
+  hasSeedData: boolean;
 }
 
-const TENANT_BY_PILOT_SLUG: Record<PilotSlug, TenantId> = {
-  flowertot: 'flowertot',
-  jhums: 'jhums',
-  moja: 'general',
-  shoilee: 'general',
+export const TENANT_CONFIGS: Record<PilotSlug, TenantConfig> = {
+  flowertot: {
+    slug: 'flowertot',
+    displayName: 'Flowertot Botanicals (UK)',
+    tenant: 'flowertot',
+    currency: '£',
+    isDemo: false,
+    hasSeedData: false,
+  },
+  jhums: {
+    slug: 'jhums',
+    displayName: 'Jhum Fashion (Bangladesh)',
+    tenant: 'jhums',
+    currency: '৳',
+    isDemo: false,
+    hasSeedData: false,
+  },
+  moja: {
+    slug: 'moja',
+    displayName: 'Moja (Berlin)',
+    tenant: 'general',
+    currency: '€',
+    isDemo: false,
+    hasSeedData: false,
+  },
+  shoilee: {
+    slug: 'shoilee',
+    displayName: 'Shoilee (Dhaka)',
+    tenant: 'general',
+    currency: '৳',
+    isDemo: false,
+    hasSeedData: false,
+  },
   // demo-fashion mirrors Jhum Fashion's category set (Three-piece/Saree/
   // Kurti/...); demo-craft and demo-food both mirror the 'general' tenant
   // used by Shoilee (jewellery) and Moja (food) respectively.
-  'demo-fashion': 'jhums',
-  'demo-craft': 'general',
-  'demo-food': 'general',
+  'demo-fashion': {
+    slug: 'demo-fashion',
+    displayName: 'Demo — Fashion (mirrors Jhum Fashion)',
+    tenant: 'jhums',
+    currency: '৳',
+    isDemo: true,
+    hasSeedData: true,
+  },
+  'demo-craft': {
+    slug: 'demo-craft',
+    displayName: 'Demo — Craft (mirrors Shoilee)',
+    tenant: 'general',
+    currency: '৳',
+    isDemo: true,
+    hasSeedData: true,
+  },
+  'demo-food': {
+    slug: 'demo-food',
+    displayName: 'Demo — Food (mirrors Moja)',
+    tenant: 'general',
+    currency: '€',
+    isDemo: true,
+    hasSeedData: true,
+  },
 };
 
-/** Each pilot's own market currency — kept separate from TENANT because two
- *  pilots can share a tenant's category config while trading in different
- *  currencies (Moja/Berlin in €, Shoilee/Dhaka in ৳). */
-const CURRENCY_BY_PILOT_SLUG: Record<PilotSlug, string> = {
-  flowertot: '£',
-  jhums: '৳',
-  moja: '€',
-  shoilee: '৳',
-  'demo-fashion': '৳',
-  'demo-craft': '৳',
-  'demo-food': '€',
-};
+/** The three sales-demo slugs (see demoSeeds.ts) — fictional, pre-seeded
+ *  instances shown manually to new prospects during a sales call. Never
+ *  linked to real pilot data — separate storage namespace like any other
+ *  PILOT_SLUG. Derived from TENANT_CONFIGS so it can't drift out of sync. */
+export const DEMO_PILOT_SLUGS: PilotSlug[] = (Object.values(TENANT_CONFIGS) as TenantConfig[])
+  .filter((c) => c.isDemo)
+  .map((c) => c.slug);
+
+export function isDemoPilot(slug: PilotSlug): boolean {
+  return TENANT_CONFIGS[slug].isDemo;
+}
 
 const DEFAULT_PILOT_SLUG: PilotSlug = 'flowertot';
 
 function isPilotSlug(value: string | undefined): value is PilotSlug {
-  return !!value && value in TENANT_BY_PILOT_SLUG;
+  return !!value && value in TENANT_CONFIGS;
 }
 
 function detectPilotSlug(): PilotSlug {
@@ -84,7 +143,7 @@ function detectPilotSlug(): PilotSlug {
   if (isPilotSlug(firstPathSegment)) return firstPathSegment;
 
   const hostname = window.location.hostname.toLowerCase();
-  const hostnameMatch = (Object.keys(TENANT_BY_PILOT_SLUG) as PilotSlug[]).find((slug) =>
+  const hostnameMatch = (Object.keys(TENANT_CONFIGS) as PilotSlug[]).find((slug) =>
     hostname.includes(slug)
   );
   if (hostnameMatch) return hostnameMatch;
@@ -93,9 +152,9 @@ function detectPilotSlug(): PilotSlug {
 }
 
 export const PILOT_SLUG: PilotSlug = detectPilotSlug();
-export const TENANT: TenantId = TENANT_BY_PILOT_SLUG[PILOT_SLUG];
+export const TENANT: TenantId = TENANT_CONFIGS[PILOT_SLUG].tenant;
 
-export const DEFAULT_CURRENCY = CURRENCY_BY_PILOT_SLUG[PILOT_SLUG];
+export const DEFAULT_CURRENCY = TENANT_CONFIGS[PILOT_SLUG].currency;
 
 /** Every localStorage key is prefixed with this, namespaced per PILOT
  *  (not per tenant) — so two pilots sharing the same tenant (e.g. Moja and
