@@ -607,7 +607,6 @@ export function AddSheet({
                   ref={cardFileInputRef}
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
