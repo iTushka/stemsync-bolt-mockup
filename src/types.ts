@@ -163,6 +163,16 @@ export interface Filters {
   showSoldOut: boolean;
   sort: SortMode;
   onlyAging: boolean;
+  /** Show only items priced below the margin-safety threshold — see
+   *  insights.ts's isBelowMargin(). Distinct from a category/sort choice:
+   *  set directly (bypassing FilterSheet) when the seller taps the
+   *  "N below margin" insight chip on Stock, so the chip actually takes
+   *  her to the item(s) it's warning about, not just a number. */
+  onlyBelowMargin: boolean;
+  /** Show only sold-out items — the "focus" counterpart to showSoldOut
+   *  (which just un-hides sold-out items alongside everything else).
+   *  Set directly when the seller taps the "N sold out" insight chip. */
+  onlySoldOut: boolean;
 }
 
 export const emptyFilters: Filters = {
@@ -170,6 +180,8 @@ export const emptyFilters: Filters = {
   showSoldOut: false,
   sort: 'newest',
   onlyAging: false,
+  onlyBelowMargin: false,
+  onlySoldOut: false,
 };
 
 export function margin(purchase: number, sale: number): number {

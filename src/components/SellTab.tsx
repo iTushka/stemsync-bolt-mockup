@@ -189,10 +189,20 @@ export function SellTab({
                       : 'hover:shadow-cardHover active:scale-[0.98]'
                   }`}
                 >
-                  <div className="relative aspect-square bg-gradient-to-br from-cream-100 to-stone-100 flex items-center justify-center">
-                    <span className="text-3xl font-light text-stone-300">
-                      {item.name.charAt(0).toUpperCase()}
-                    </span>
+                  <div className="relative aspect-square bg-gradient-to-br from-cream-100 to-stone-100">
+                    {item.imageUrl ? (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <span className="text-3xl font-light text-stone-300">
+                          {item.name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    )}
                     {inCart > 0 && (
                       <span className="absolute top-2 right-2 flex h-6 min-w-6 items-center justify-center rounded-full bg-accent-500 px-1.5 text-xs font-bold text-white">
                         {inCart}

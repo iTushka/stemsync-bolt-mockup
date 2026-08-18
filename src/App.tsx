@@ -495,6 +495,7 @@ function App() {
             activeFilterCount={activeFilterCount}
             onSearch={setSearch}
             onOpenFilters={() => setFilterOpen(true)}
+            onFocusFilter={setFilters}
             onAdd={() => setAddOpen(true)}
             onEditItem={(item) => setEditingItem(item)}
             onGetWhatsAppCard={() => setWhatsAppCardOpen(true)}

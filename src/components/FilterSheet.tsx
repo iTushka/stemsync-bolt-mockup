@@ -5,6 +5,7 @@ import { emptyFilters } from '../types';
 import { CATEGORIES_BY_TENANT } from '../categoryFieldMap';
 import { TENANT } from '../config';
 import { applyFilters, SORT_OPTIONS } from '../filterLogic';
+import { isBelowMargin, LOW_MARGIN_THRESHOLD } from '../insights';
 import { Sheet } from './Sheet';
 
 interface FilterSheetProps {
@@ -20,6 +21,7 @@ const AGING_DAYS = 7;
 export function FilterSheet({ open, onClose, filters, items, onApply }: FilterSheetProps) {
   const [draft, setDraft] = useState<Filters>(filters);
   const [tooltipOpen, setTooltipOpen] = useState(false);
+  const [marginTooltipOpen, setMarginTooltipOpen] = useState(false);
 
   useEffect(() => {
     if (open) setDraft(filters);
@@ -31,6 +33,10 @@ export function FilterSheet({ open, onClose, filters, items, onApply }: FilterSh
   );
   const agingCount = useMemo(
     () => items.filter((i) => i.aging).length,
+    [items],
+  );
+  const belowMarginCount = useMemo(
+    () => items.filter(isBelowMargin).length,
     [items],
   );
 
@@ -113,6 +119,13 @@ export function FilterSheet({ open, onClose, filters, items, onApply }: FilterSh
             checked={draft.showSoldOut}
             onChange={(v) => setDraft((d) => ({ ...d, showSoldOut: v }))}
           />
+          <ToggleRow
+            label="Sold out only"
+            count={soldOutCount}
+            countLabel="items"
+            checked={draft.onlySoldOut}
+            onChange={(v) => setDraft((d) => ({ ...d, onlySoldOut: v }))}
+          />
         </section>
 
         {/* Age */}
@@ -128,6 +141,24 @@ export function FilterSheet({ open, onClose, filters, items, onApply }: FilterSh
                 open={tooltipOpen}
                 onToggle={() => setTooltipOpen((v) => !v)}
                 text={`Items that have sat unsold for more than ${AGING_DAYS} days.`}
+              />
+            }
+          />
+        </section>
+
+        {/* Margin */}
+        <section className="mt-6">
+          <ToggleRow
+            label="Below margin only"
+            count={belowMarginCount}
+            countLabel="items"
+            checked={draft.onlyBelowMargin}
+            onChange={(v) => setDraft((d) => ({ ...d, onlyBelowMargin: v }))}
+            info={
+              <InfoTrigger
+                open={marginTooltipOpen}
+                onToggle={() => setMarginTooltipOpen((v) => !v)}
+                text={`Items priced below the ${LOW_MARGIN_THRESHOLD}% margin-safety threshold.`}
               />
             }
           />

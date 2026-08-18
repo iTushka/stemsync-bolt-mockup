@@ -19,10 +19,27 @@ export interface InsightChip {
   icon: LucideIcon;
   label: string;
   tone: InsightTone;
+  /** Optional — when set, the chip renders as a real button and taps
+   *  through to whatever the chip is describing (a filtered list, or the
+   *  one specific item it names) instead of being a read-only badge. Not
+   *  every chip has a sensible target (e.g. "Stock looks healthy"), so
+   *  this stays optional rather than forcing every chip to be clickable. */
+  onClick?: () => void;
 }
 
-const LOW_MARGIN_THRESHOLD = 30;
+export const LOW_MARGIN_THRESHOLD = 30;
 const LOW_STOCK_THRESHOLD = 3;
+
+/** Shared definition of "below margin" — used by both the Stock insight
+ *  chip and the matching FilterSheet/Filters toggle so tapping "N below
+ *  margin" and manually filtering always agree on exactly which items
+ *  count. Same threshold the pricing calculator's red/yellow/green
+ *  warning already uses (CLAUDE.md: margin threshold is a product
+ *  principle, not just a colour) — kept in one place rather than
+ *  re-implemented per call site. */
+export function isBelowMargin(item: StockItem): boolean {
+  return !item.soldOut && item.salePrice > 0 && margin(item.purchasePrice, item.salePrice) < LOW_MARGIN_THRESHOLD;
+}
 
 /**
  * Forecasting signals — added after direct pilot feedback: a solo
@@ -115,7 +132,11 @@ function fastMoverInsight(items: StockItem[], sales: Sale[]): InsightChip | unde
   };
 }
 
-function slowMoverInsight(items: StockItem[], sales: Sale[]): InsightChip | undefined {
+function slowMoverInsight(
+  items: StockItem[],
+  sales: Sale[],
+  onOpenItem?: (item: StockItem) => void
+): InsightChip | undefined {
   const now = Date.now();
   let staleItem: StockItem | undefined;
   let staleDays = 0;
@@ -137,6 +158,7 @@ function slowMoverInsight(items: StockItem[], sales: Sale[]): InsightChip | unde
     icon: TrendingDown,
     label: `${staleItem.name}: no sales in ${staleDays} days`,
     tone: 'danger',
+    onClick: onOpenItem ? () => onOpenItem!(staleItem!) : undefined,
   };
 }
 
@@ -202,29 +224,56 @@ function marginTrendInsight(items: StockItem[], sales: Sale[]): InsightChip | un
   };
 }
 
-export function stockInsights(items: StockItem[], sales: Sale[] = []): InsightChip[] {
+/** Actions the caller can wire up to make chips tappable — omit any of
+ *  these and that chip's onClick is simply left unset (renders as a plain
+ *  badge, same as before). Kept as callbacks rather than having this file
+ *  reach into Filters/navigation state directly, so insights.ts stays a
+ *  pure "compute chips from data" module. */
+export interface StockInsightActions {
+  onFocusAging?: () => void;
+  onFocusBelowMargin?: () => void;
+  onFocusSoldOut?: () => void;
+  onOpenItem?: (item: StockItem) => void;
+}
+
+export function stockInsights(
+  items: StockItem[],
+  sales: Sale[] = [],
+  actions?: StockInsightActions
+): InsightChip[] {
   const chips: InsightChip[] = [];
 
   const aging = items.filter((i) => i.aging && !i.soldOut);
   if (aging.length > 0) {
-    chips.push({ id: 'aging', icon: Clock, label: `${aging.length} aging`, tone: 'warning' });
+    chips.push({
+      id: 'aging',
+      icon: Clock,
+      label: `${aging.length} aging`,
+      tone: 'warning',
+      onClick: actions?.onFocusAging,
+    });
   }
 
-  const belowMargin = items.filter(
-    (i) => !i.soldOut && i.salePrice > 0 && margin(i.purchasePrice, i.salePrice) < LOW_MARGIN_THRESHOLD
-  );
+  const belowMargin = items.filter(isBelowMargin);
   if (belowMargin.length > 0) {
     chips.push({
       id: 'margin',
       icon: AlertTriangle,
       label: `${belowMargin.length} below margin`,
       tone: 'danger',
+      onClick: actions?.onFocusBelowMargin,
     });
   }
 
   const soldOut = items.filter((i) => i.soldOut);
   if (soldOut.length > 0) {
-    chips.push({ id: 'soldout', icon: PackageX, label: `${soldOut.length} sold out`, tone: 'info' });
+    chips.push({
+      id: 'soldout',
+      icon: PackageX,
+      label: `${soldOut.length} sold out`,
+      tone: 'info',
+      onClick: actions?.onFocusSoldOut,
+    });
   }
 
   const channelChip = channelConcentrationInsight(sales);
@@ -233,7 +282,7 @@ export function stockInsights(items: StockItem[], sales: Sale[] = []): InsightCh
   const fastMoverChip = fastMoverInsight(items, sales);
   if (fastMoverChip) chips.push(fastMoverChip);
 
-  const slowMoverChip = slowMoverInsight(items, sales);
+  const slowMoverChip = slowMoverInsight(items, sales, actions?.onOpenItem);
   if (slowMoverChip) chips.push(slowMoverChip);
 
   const marginTrendChip = marginTrendInsight(items, sales);

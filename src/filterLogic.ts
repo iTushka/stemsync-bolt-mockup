@@ -1,10 +1,16 @@
 import type { StockItem, Filters, SortMode } from './types';
+import { isBelowMargin } from './insights';
 
 export function applyFilters(items: StockItem[], filters: Filters): StockItem[] {
   const result = items.filter((i) => {
     if (filters.categories.length > 0 && !filters.categories.includes(i.category)) return false;
+    // onlySoldOut is the "focus" counterpart to showSoldOut: it overrides
+    // the normal hide/show-alongside-everything-else toggle entirely,
+    // since the whole point is to show ONLY the sold-out items.
+    if (filters.onlySoldOut) return i.soldOut;
     if (!filters.showSoldOut && i.soldOut) return false;
     if (filters.onlyAging && !i.aging) return false;
+    if (filters.onlyBelowMargin && !isBelowMargin(i)) return false;
     return true;
   });
 
@@ -28,7 +34,9 @@ export function countActiveFilters(filters: Filters): number {
   return (
     (filters.categories.length > 0 ? 1 : 0) +
     (filters.showSoldOut ? 1 : 0) +
-    (filters.onlyAging ? 1 : 0)
+    (filters.onlyAging ? 1 : 0) +
+    (filters.onlyBelowMargin ? 1 : 0) +
+    (filters.onlySoldOut ? 1 : 0)
   );
 }
 

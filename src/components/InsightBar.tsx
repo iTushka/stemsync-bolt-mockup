@@ -28,13 +28,29 @@ export function InsightBar({ chips }: InsightBarProps) {
     >
       {chips.map((chip) => {
         const Icon = chip.icon;
-        return (
+        const content = (
+          <>
+            <Icon size={13} />
+            {chip.label}
+          </>
+        );
+        // Chips with a real target (a filtered view, or the one item they
+        // name) render as buttons; the rest stay plain, read-only badges —
+        // see InsightChip.onClick's doc comment in insights.ts.
+        return chip.onClick ? (
+          <button
+            key={chip.id}
+            onClick={chip.onClick}
+            className={`inline-flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition hover:brightness-95 active:scale-95 ${TONE_CLASSES[chip.tone]}`}
+          >
+            {content}
+          </button>
+        ) : (
           <span
             key={chip.id}
             className={`inline-flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold ${TONE_CLASSES[chip.tone]}`}
           >
-            <Icon size={13} />
-            {chip.label}
+            {content}
           </span>
         );
       })}

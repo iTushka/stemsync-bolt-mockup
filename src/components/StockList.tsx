@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Search, SlidersHorizontal, Plus, Clock, Package2, ChevronDown, Layers } from 'lucide-react';
-import type { StockItem, Sale, StockPeriod, TeamUser } from '../types';
+import type { StockItem, Sale, StockPeriod, TeamUser, Filters } from '../types';
+import { emptyFilters } from '../types';
 import { swatchFor } from '../colorPalette';
 import { margin } from '../types';
 import { HeaderIconButtons } from './HeaderIconButtons';
@@ -25,6 +26,13 @@ interface StockListProps {
   activeFilterCount: number;
   onSearch: (q: string) => void;
   onOpenFilters: () => void;
+  /** Applies a filter set directly, bypassing the FilterSheet UI — used to
+   *  make the Stock insight chips ("N aging", "N below margin", "N sold
+   *  out") actually take the seller to the item(s) they're about, not just
+   *  report a number. Always passed a fresh `{ ...emptyFilters, onlyX:
+   *  true }` object so any previously-active filter doesn't hide the very
+   *  items the chip is pointing at. */
+  onFocusFilter: (f: Filters) => void;
   onAdd: () => void;
   onEditItem: (item: StockItem) => void;
   onGetWhatsAppCard: () => void;
@@ -100,6 +108,7 @@ export function StockList({
   activeFilterCount,
   onSearch,
   onOpenFilters,
+  onFocusFilter,
   onAdd,
   onEditItem,
   onGetWhatsAppCard,
@@ -182,7 +191,14 @@ export function StockList({
 
       <EarningsStrip sales={sales} items={allItems} currencySymbol={currencySymbol} />
 
-      <InsightBar chips={stockInsights(allItems, sales)} />
+      <InsightBar
+        chips={stockInsights(allItems, sales, {
+          onFocusAging: () => onFocusFilter({ ...emptyFilters, onlyAging: true }),
+          onFocusBelowMargin: () => onFocusFilter({ ...emptyFilters, onlyBelowMargin: true }),
+          onFocusSoldOut: () => onFocusFilter({ ...emptyFilters, onlySoldOut: true }),
+          onOpenItem: onEditItem,
+        })}
+      />
 
       <ShareAccountHint teamSize={team.length} onOpenSettings={onOpenSettings} />
 
