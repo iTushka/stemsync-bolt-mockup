@@ -16,7 +16,10 @@ interface EarningsStripProps {
 export function EarningsStrip({ sales, items, currencySymbol }: EarningsStripProps) {
   if (sales.length === 0) return null;
 
-  const { saleCount, revenue, profit, stockValue, windowDays } = computeEarnings(sales, items);
+  const { saleCount, revenue, profit, stockValue, windowDays, breakEvenUnits } = computeEarnings(
+    sales,
+    items
+  );
 
   return (
     <div className="px-4 pb-2.5 animate-fadeIn">
@@ -40,7 +43,13 @@ export function EarningsStrip({ sales, items, currencySymbol }: EarningsStripPro
             {currencySymbol}
             {stockValue.toFixed(2)}
           </div>
-          <div className="mt-0.5 text-[10px] text-stone-400">right now</div>
+          <div className="mt-0.5 text-[10px] text-stone-400">
+            right now
+            {/* B5 — tuvara-bifogade-filer-analys.md: "how much do I need
+                to sell to break even", not just the raw stock value on its
+                own. Only shown once it resolves to a real number. */}
+            {breakEvenUnits !== null && ` · ≈${breakEvenUnits} sales to break even`}
+          </div>
         </div>
       </div>
     </div>

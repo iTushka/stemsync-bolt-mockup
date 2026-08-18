@@ -18,6 +18,13 @@ export interface EarningsSummary {
   /** purchasePrice × quantity, summed over all current stock regardless of
    *  when it was bought — money currently tied up, not a period figure. */
   stockValue: number;
+  /** B5 (tuvara-bifogade-filer-analys.md) — "how many units, at your
+   *  current average sale price, would it take to recover the money
+   *  currently tied up in stock". null when there's nothing in stock to
+   *  recover, or no sale prices to average yet — shown as a plain number
+   *  rather than an estimate, since it's exact arithmetic over data
+   *  already in the app, not a forecast (contrast with forecast.ts). */
+  breakEvenUnits: number | null;
 }
 
 const DEFAULT_WINDOW_DAYS = 7;
@@ -46,6 +53,14 @@ export function computeEarnings(
 
   const stockValue = items.reduce((sum, i) => sum + i.purchasePrice * i.quantity, 0);
 
+  const sellableItems = items.filter((i) => !i.soldOut && i.salePrice > 0);
+  const avgSalePrice =
+    sellableItems.length > 0
+      ? sellableItems.reduce((sum, i) => sum + i.salePrice, 0) / sellableItems.length
+      : 0;
+  const breakEvenUnits =
+    stockValue > 0 && avgSalePrice > 0 ? Math.ceil(stockValue / avgSalePrice) : null;
+
   return {
     windowDays,
     saleCount,
@@ -53,5 +68,6 @@ export function computeEarnings(
     knownCost,
     profit: revenue - knownCost,
     stockValue,
+    breakEvenUnits,
   };
 }

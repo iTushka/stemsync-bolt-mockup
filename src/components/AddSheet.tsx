@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, Mic, MicOff, Sparkles, Plus, Trash2, Check, Camera, AlertTriangle, Copy, CheckCircle2, ImagePlus, Calculator, Layers } from 'lucide-react';
-import type { StockItem, Category, SalesChannel } from '../types';
+import type { StockItem, Category, SalesChannel, Sale, MarkupPreset, SeasonPreset } from '../types';
 import { margin } from '../types';
 import { parseEntry, createDraftFromParsed, type ParsedEntry } from '../parse';
 import { buildAdCopy, copyToClipboard } from '../adCopy';
 import { Sheet } from './Sheet';
 import { UpgradePrompt } from './UpgradePrompt';
 import { AiBadge } from './AiBadge';
-import { CATEGORIES_BY_TENANT, categoryFieldConfig, ADD_ITEM_TEXT_BY_TENANT } from '../categoryFieldMap';
+import { COLOR_PALETTE } from '../colorPalette';
+import { forecastForName } from '../forecast';
+import { suggestMarkup } from '../markupSuggestions';
+import { CATEGORIES_BY_TENANT, categoryFieldConfig, ADD_ITEM_TEXT_BY_TENANT, SEASON_PRESETS_BY_TENANT } from '../categoryFieldMap';
 import { recordCategoryCorrection } from '../categoryLearning';
 import { TENANT } from '../config';
 import { useSpeechToText } from '../useSpeechToText';
+import { useLanguage } from '../useLanguage';
+import type { Lang } from '../strings';
 import {
   totalUnitsFromBatch,
   unitCostFromBatch,
@@ -42,6 +47,18 @@ interface AddSheetProps {
   simulateFreePlan?: boolean;
   currencySymbol?: string;
   exchangeRates?: ExchangeRates;
+  /** B7 (tuvara-bifogade-filer-analys.md) — needed only to compute the
+   *  sell-through forecast hint below the quantity field. Optional/defaults
+   *  to empty so nothing breaks if a caller doesn't pass them. */
+  items?: StockItem[];
+  sales?: Sale[];
+  /** B2/B3 (tuvara-sasongspaslag-analys.md) — seller's own tag-markup
+   *  presets (Lager 2, no seeded default) and season/occasion presets
+   *  (Lager 3, tenant-seeded but editable). Both optional: an unset
+   *  markupPresets means no tag-based suggestion applies yet, and an unset
+   *  seasonPresets falls back to SEASON_PRESETS_BY_TENANT[TENANT]. */
+  markupPresets?: MarkupPreset[];
+  seasonPresets?: SeasonPreset[];
 }
 
 const FREE_CHANNEL_LIMIT = 1;
@@ -86,7 +103,12 @@ export function AddSheet({
   simulateFreePlan = false,
   currencySymbol = 'kr',
   exchangeRates = {},
+  items = [],
+  sales = [],
+  markupPresets,
+  seasonPresets,
 }: AddSheetProps) {
+  const { t, lang } = useLanguage();
   const [rawText, setRawText] = useState('');
   const [parsed, setParsed] = useState<ParsedEntry | null>(null);
   const [showCard, setShowCard] = useState(false);
@@ -105,6 +127,11 @@ export function AddSheet({
   const [photoStep, setPhotoStep] = useState(false);
   const [pendingImageUrl, setPendingImageUrl] = useState<string | undefined>();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  // Which language the generated ad copy's template phrases are written in
+  // (tuvara-visuell-lonsamhet-analys.md) — starts at the app's own UI
+  // language but is independently switchable, since a seller posting to a
+  // Bangla-speaking audience isn't always reading Tuvara itself in Bangla.
+  const [copyLang, setCopyLang] = useState<Lang>(lang);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cardFileInputRef = useRef<HTMLInputElement>(null);
   const tenantCategories = CATEGORIES_BY_TENANT[TENANT];
@@ -113,6 +140,13 @@ export function AddSheet({
   const speech = useSpeechToText((transcript) => {
     setRawText((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
   });
+
+  // Groups the three alternate ways of arriving at a purchase price (batch/
+  // tray buying, foreign currency, cost-part breakdown) behind a single
+  // disclosure instead of three separate always-visible toggles — see
+  // tuvara-ux-intuitivitet-analys.md P0.3. Purely presentational; none of
+  // the calculators below changed.
+  const [pricingOptionsOpen, setPricingOptionsOpen] = useState(false);
 
   // Batch/tray purchase calculator — see batchPricing.ts. Off by default;
   // most single-item entries never need it.
@@ -180,6 +214,10 @@ export function AddSheet({
         soldOut: editItem.soldOut,
         agingAction: editItem.agingAction,
         agingActionNote: editItem.agingActionNote,
+        color: editItem.color,
+        bulkThreshold: editItem.bulkThreshold,
+        bulkUnitPrice: editItem.bulkUnitPrice,
+        season: editItem.season,
       });
       setParsed(null);
       setShowCard(true);
@@ -415,7 +453,7 @@ export function AddSheet({
 
   const selectedChannel: SalesChannel | undefined =
     selectedChannelId === 'general' ? undefined : draft.channels.find((c) => c.id === selectedChannelId);
-  const adCopyText = buildAdCopy(draft, selectedChannel, currencySymbol);
+  const adCopyText = buildAdCopy(draft, selectedChannel, currencySymbol, copyLang);
 
   const handleCopy = async () => {
     const ok = await copyToClipboard(adCopyText);
@@ -426,6 +464,37 @@ export function AddSheet({
   };
 
   const m = margin(draft.purchasePrice, draft.salePrice);
+
+  // B7 (tuvara-bifogade-filer-analys.md) — only for a brand-new item
+  // (editItem is when you're correcting an existing entry, not restocking
+  // a fresh batch) and only once there's a real quantity to forecast
+  // against. forecastForName itself returns null with no match/history,
+  // so nothing renders for a genuinely new item name — see forecast.ts.
+  const sellThroughForecast =
+    !editItem ? forecastForName(draft.name, draft.quantity, items, sales) : null;
+
+  // B2/B3 (tuvara-sasongspaslag-analys.md) — combines tag presets (Lager 2)
+  // and the chosen season/occasion's boost (Lager 3) into one suggested
+  // price. Falls back to the tenant's starter season list until the seller
+  // has edited it herself in Settings (see AppSettings.seasonPresets).
+  const resolvedSeasonPresets = seasonPresets ?? SEASON_PRESETS_BY_TENANT[TENANT];
+  const markupSuggestion = suggestMarkup(
+    draft.purchasePrice,
+    draft.tags,
+    draft.season,
+    markupPresets ?? [],
+    resolvedSeasonPresets
+  );
+  const showMarkupSuggestion =
+    markupSuggestion !== null && Math.abs(markupSuggestion.suggestedPrice - draft.salePrice) > 0.01;
+
+  // tuvara-visuell-lonsamhet-analys.md — existing group names, so a seller
+  // adding the second/third variant of a style can reuse the exact same
+  // spelling instead of retyping it (and risking a typo that would silently
+  // stop the items from clustering in StockList).
+  const existingVariantGroups = Array.from(
+    new Set(items.map((i) => i.variantGroup).filter((g): g is string => Boolean(g)))
+  ).sort();
 
   const addChannel = () => {
     if (!channelInput.trim()) return;
@@ -453,7 +522,7 @@ export function AddSheet({
   return (
     <Sheet open={open} onClose={handleClose} maxHeight="94vh">
       <div className="flex items-center justify-between px-5 py-2 shrink-0">
-        <h2 className="text-lg font-bold text-stone-900">{editItem ? 'Edit item' : 'Add item'}</h2>
+        <h2 className="text-lg font-bold text-stone-900">{editItem ? t('addItemEditTitle') : t('addItemTitle')}</h2>
         <button onClick={handleClose} className="w-8 h-8 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-100">
           <X size={20} />
         </button>
@@ -592,7 +661,7 @@ export function AddSheet({
             <div className="bg-white rounded-2xl border border-stone-200 p-4 space-y-3.5">
               <h3 className="text-xs font-semibold text-stone-400 uppercase tracking-wide">The essentials</h3>
 
-              <Field label="Name">
+              <Field label={t('addItemNameLabel')}>
                 <input
                   value={draft.name}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -601,7 +670,7 @@ export function AddSheet({
                 />
               </Field>
 
-              <Field label="Image">
+              <Field label={t('addItemImageLabel')}>
                 <input
                   ref={cardFileInputRef}
                   type="file"
@@ -628,7 +697,7 @@ export function AddSheet({
                   >
                     <img src={draft.imageUrl} alt="" className="w-full h-full object-cover" />
                     <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center text-white text-xs font-medium opacity-0 group-hover:opacity-100 transition">
-                      Change photo
+                      {t('addItemChangePhoto')}
                     </span>
                   </button>
                 ) : (
@@ -637,79 +706,183 @@ export function AddSheet({
                     className="w-full aspect-square max-h-32 rounded-xl border-2 border-dashed border-stone-200 flex flex-col items-center justify-center text-stone-400 hover:border-accent-300 hover:text-accent-500 transition"
                   >
                     <Camera size={22} />
-                    <span className="text-xs mt-1.5">Upload image</span>
+                    <span className="text-xs mt-1.5">{t('addItemUploadImage')}</span>
                   </button>
                 )}
               </Field>
 
-              {/* Batch/tray purchase toggle */}
-              <button
-                onClick={handleToggleBatchMode}
-                className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-accent-600 hover:text-accent-700 transition"
-              >
-                <Calculator size={15} />
-                <span>{batchMode ? '− Bought as a single item instead' : 'Bought as a batch or tray?'}</span>
-              </button>
+              {/* Single disclosure for the three alternate ways of arriving
+                  at a purchase price — batch/tray buying, foreign currency,
+                  cost-part breakdown. Collapsed by default: a plain single-
+                  item entry never needs to see any of these. */}
+              <div>
+                <button
+                  onClick={() => setPricingOptionsOpen((v) => !v)}
+                  className="w-full flex items-center justify-center gap-1.5 text-sm font-medium text-accent-600 hover:text-accent-700 transition"
+                >
+                  <Calculator size={15} />
+                  <span>
+                    {pricingOptionsOpen
+                      ? t('addItemPricingOptionsOpen')
+                      : t('addItemPricingOptionsClosed')}
+                  </span>
+                </button>
 
-              {batchMode && (
-                <div className="rounded-xl bg-cream-100 border border-stone-200 p-3 space-y-2.5 animate-fadeIn">
-                  <p className="text-xs text-stone-500 leading-snug">
-                    Enter what you paid in total — the cost per unit is worked out for you.
-                    <br />
-                    E.g. 2 {addItemText.batchUnitLabel.toLowerCase()} × 6 {addItemText.batchPerUnitLabel.toLowerCase()} = 12 units, {currencySymbol}20 total →{' '}
-                    {currencySymbol}1.67 each.
-                  </p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Field label={`Total cost (${currencySymbol})`}>
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        value={batchTotalCost}
-                        onChange={(e) => {
-                          setBatchTotalCost(e.target.value);
-                          applyBatchCalculation(e.target.value, batchTrays, batchPiecesPerTray);
-                        }}
-                        placeholder="20"
-                        className="input"
-                      />
-                    </Field>
-                    <Field label={addItemText.batchUnitLabel}>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={batchTrays}
-                        onChange={(e) => {
-                          setBatchTrays(e.target.value);
-                          applyBatchCalculation(batchTotalCost, e.target.value, batchPiecesPerTray);
-                        }}
-                        placeholder={addItemText.batchUnitPlaceholder}
-                        className="input"
-                      />
-                    </Field>
-                    <Field label={addItemText.batchPerUnitLabel}>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={batchPiecesPerTray}
-                        onChange={(e) => {
-                          setBatchPiecesPerTray(e.target.value);
-                          applyBatchCalculation(batchTotalCost, batchTrays, e.target.value);
-                        }}
-                        placeholder={addItemText.batchPerUnitPlaceholder}
-                        className="input"
-                      />
-                    </Field>
+                {pricingOptionsOpen && (
+                  <div className="mt-2.5 space-y-3 animate-fadeIn">
+                    {/* Batch/tray purchase toggle */}
+                    <button
+                      onClick={handleToggleBatchMode}
+                      className="w-full text-sm font-medium text-accent-600 hover:text-accent-700 transition"
+                    >
+                      <span>{batchMode ? t('addItemBatchToggleOn') : t('addItemBatchToggleOff')}</span>
+                    </button>
+
+                    {batchMode && (
+                      <div className="rounded-xl bg-cream-100 border border-stone-200 p-3 space-y-2.5 animate-fadeIn">
+                        <p className="text-xs text-stone-500 leading-snug">
+                          Enter what you paid in total — the cost per unit is worked out for you.
+                          <br />
+                          E.g. 2 {addItemText.batchUnitLabel.toLowerCase()} × 6 {addItemText.batchPerUnitLabel.toLowerCase()} = 12 units, {currencySymbol}20 total →{' '}
+                          {currencySymbol}1.67 each.
+                        </p>
+                        <div className="grid grid-cols-3 gap-2">
+                          <Field label={`Total cost (${currencySymbol})`}>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              value={batchTotalCost}
+                              onChange={(e) => {
+                                setBatchTotalCost(e.target.value);
+                                applyBatchCalculation(e.target.value, batchTrays, batchPiecesPerTray);
+                              }}
+                              placeholder="20"
+                              className="input"
+                            />
+                          </Field>
+                          <Field label={addItemText.batchUnitLabel}>
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              value={batchTrays}
+                              onChange={(e) => {
+                                setBatchTrays(e.target.value);
+                                applyBatchCalculation(batchTotalCost, e.target.value, batchPiecesPerTray);
+                              }}
+                              placeholder={addItemText.batchUnitPlaceholder}
+                              className="input"
+                            />
+                          </Field>
+                          <Field label={addItemText.batchPerUnitLabel}>
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              value={batchPiecesPerTray}
+                              onChange={(e) => {
+                                setBatchPiecesPerTray(e.target.value);
+                                applyBatchCalculation(batchTotalCost, batchTrays, e.target.value);
+                              }}
+                              placeholder={addItemText.batchPerUnitPlaceholder}
+                              className="input"
+                            />
+                          </Field>
+                        </div>
+                        {batchTotalCost && batchTrays && batchPiecesPerTray && draft.quantity > 0 && draft.purchasePrice > 0 && (
+                          <AiBadge
+                            text={`${draft.quantity} units at ${currencySymbol}${draft.purchasePrice.toFixed(2)} each — cost calculated automatically.`}
+                          />
+                        )}
+                      </div>
+                    )}
+
+                    {!batchMode && (
+                      <div>
+                        <button
+                          onClick={() => setForeignPurchaseMode((v) => !v)}
+                          className="text-xs font-medium text-accent-600 hover:text-accent-700 transition"
+                        >
+                          {foreignPurchaseMode ? '− Paid in a different currency?' : '+ Paid in a different currency?'}
+                        </button>
+                        {foreignPurchaseMode && (
+                          availableCurrencyCodes.length === 0 ? (
+                            <p className="mt-1.5 text-[11px] text-stone-400 leading-snug">
+                              Add a rate in Settings first.
+                            </p>
+                          ) : (
+                            <div className="mt-2 space-y-2 animate-fadeIn">
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  value={foreignAmount}
+                                  onChange={(e) => setForeignAmount(e.target.value)}
+                                  placeholder="Amount"
+                                  className="input"
+                                />
+                                <select
+                                  value={foreignCurrency}
+                                  onChange={(e) => setForeignCurrency(e.target.value as CurrencyCode | '')}
+                                  className="input"
+                                >
+                                  <option value="">Currency</option>
+                                  {availableCurrencyCodes.map((code) => (
+                                    <option key={code} value={code}>{code}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              {convertedLocalAmount !== undefined && (
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs text-stone-500 leading-snug">
+                                    ≈ {currencySymbol}{convertedLocalAmount.toFixed(2)} based on your saved rate
+                                  </p>
+                                  <button
+                                    onClick={applyForeignPurchase}
+                                    className="shrink-0 px-3 py-1.5 rounded-full bg-accent-500 text-white text-xs font-semibold active:scale-95 transition"
+                                  >
+                                    Use this
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        )}
+                      </div>
+                    )}
+
+                    {!batchMode && (
+                      <div>
+                        <button
+                          onClick={() => setCostCalcOpen((v) => !v)}
+                          className="text-xs font-medium text-accent-600 hover:text-accent-700 transition"
+                        >
+                          {costCalcOpen ? '− Add cost part' : '+ Add cost part'}
+                        </button>
+                        {costCalcOpen && (
+                          <div className="mt-2">
+                            <CostPartsCalculator
+                              parts={costParts}
+                              onPartsChange={setCostParts}
+                              currencySymbol={currencySymbol}
+                              onApply={(total) => {
+                                setDraft((d) => ({
+                                  ...d,
+                                  purchasePrice: total,
+                                  salePrice: salePriceTouched ? d.salePrice : suggestSalePrice(total, markup),
+                                }));
+                                setCostParts([]);
+                                setCostCalcOpen(false);
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {batchTotalCost && batchTrays && batchPiecesPerTray && draft.quantity > 0 && draft.purchasePrice > 0 && (
-                    <AiBadge
-                      text={`${draft.quantity} units at ${currencySymbol}${draft.purchasePrice.toFixed(2)} each — cost calculated automatically.`}
-                    />
-                  )}
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Quantity">
+                <Field label={t('addItemQuantityLabel')}>
                   <input
                     type="number"
                     inputMode="numeric"
@@ -724,8 +897,16 @@ export function AddSheet({
                       Couldn't find this — try "bought 20" or "20 units"
                     </p>
                   )}
+                  {sellThroughForecast && (
+                    <p className="mt-1.5 text-[11px] text-accent-600 leading-snug flex items-start gap-1">
+                      <Sparkles size={11} className="shrink-0 mt-0.5" />
+                      Past batches of "{draft.name.trim()}" sold through{' '}
+                      {Math.round(sellThroughForecast.sellThroughRate * 100)}% — expect to sell ~
+                      {sellThroughForecast.expectedToSell} of {draft.quantity}.
+                    </p>
+                  )}
                 </Field>
-                <Field label={`Purchase price (${currencySymbol}/unit)`}>
+                <Field label={`${t('addItemPurchasePriceLabel')} (${currencySymbol}/unit)`}>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -750,91 +931,8 @@ export function AddSheet({
                 </Field>
               </div>
 
-              {!batchMode && (
-                <div>
-                  <button
-                    onClick={() => setForeignPurchaseMode((v) => !v)}
-                    className="text-xs font-medium text-accent-600 hover:text-accent-700 transition"
-                  >
-                    {foreignPurchaseMode ? '− Paid in a different currency?' : '+ Paid in a different currency?'}
-                  </button>
-                  {foreignPurchaseMode && (
-                    availableCurrencyCodes.length === 0 ? (
-                      <p className="mt-1.5 text-[11px] text-stone-400 leading-snug">
-                        Add a rate in Settings first.
-                      </p>
-                    ) : (
-                      <div className="mt-2 space-y-2 animate-fadeIn">
-                        <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            value={foreignAmount}
-                            onChange={(e) => setForeignAmount(e.target.value)}
-                            placeholder="Amount"
-                            className="input"
-                          />
-                          <select
-                            value={foreignCurrency}
-                            onChange={(e) => setForeignCurrency(e.target.value as CurrencyCode | '')}
-                            className="input"
-                          >
-                            <option value="">Currency</option>
-                            {availableCurrencyCodes.map((code) => (
-                              <option key={code} value={code}>{code}</option>
-                            ))}
-                          </select>
-                        </div>
-                        {convertedLocalAmount !== undefined && (
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs text-stone-500 leading-snug">
-                              ≈ {currencySymbol}{convertedLocalAmount.toFixed(2)} based on your saved rate
-                            </p>
-                            <button
-                              onClick={applyForeignPurchase}
-                              className="shrink-0 px-3 py-1.5 rounded-full bg-accent-500 text-white text-xs font-semibold active:scale-95 transition"
-                            >
-                              Use this
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  )}
-                </div>
-              )}
-
-              {!batchMode && (
-                <div>
-                  <button
-                    onClick={() => setCostCalcOpen((v) => !v)}
-                    className="text-xs font-medium text-accent-600 hover:text-accent-700 transition"
-                  >
-                    {costCalcOpen ? '− Add cost part' : '+ Add cost part'}
-                  </button>
-                  {costCalcOpen && (
-                    <div className="mt-2">
-                      <CostPartsCalculator
-                        parts={costParts}
-                        onPartsChange={setCostParts}
-                        currencySymbol={currencySymbol}
-                        onApply={(total) => {
-                          setDraft((d) => ({
-                            ...d,
-                            purchasePrice: total,
-                            salePrice: salePriceTouched ? d.salePrice : suggestSalePrice(total, markup),
-                          }));
-                          setCostParts([]);
-                          setCostCalcOpen(false);
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Markup (× cost)">
+                <Field label={t('addItemMarkupLabel')}>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -847,10 +945,10 @@ export function AddSheet({
                     className="input"
                   />
                   <p className="mt-1 text-[11px] text-stone-400 leading-snug">
-                    Typical range {MIN_MARKUP}×–{MAX_MARKUP}×
+                    {t('addItemMarkupHint')} {MIN_MARKUP}×–{MAX_MARKUP}×
                   </p>
                 </Field>
-                <Field label={`Suggested sale price (${currencySymbol}/unit)`}>
+                <Field label={`${t('addItemSuggestedPriceLabel')} (${currencySymbol}/unit)`}>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -902,6 +1000,45 @@ export function AddSheet({
               </div>
               {!salePriceTouched && draft.salePrice > 0 && (
                 <AiBadge text="Price suggested from your markup — edit it any time." />
+              )}
+
+              {/* tuvara-visuell-lonsamhet-analys.md — a plain cost-vs-profit
+                  bar for *this item's* price, distinct from the
+                  business-wide "sales/week to cover fixed costs" break-even
+                  already shown in Business Health. Deliberately not the
+                  same number or the same UI, to avoid conflating the two
+                  break-even concepts. */}
+              {draft.salePrice > 0 && draft.purchasePrice > 0 && (
+                <PriceBreakdownBar
+                  purchasePrice={draft.purchasePrice}
+                  salePrice={draft.salePrice}
+                  currencySymbol={currencySymbol}
+                />
+              )}
+
+              {/* B2/B3 (tuvara-sasongspaslag-analys.md) — a separate,
+                  explicit suggestion layered from tag presets + the chosen
+                  season's boost. Never auto-applied; the seller taps "Use
+                  this price" to accept it, same as the foreign-currency and
+                  cost-part calculators above. */}
+              {showMarkupSuggestion && markupSuggestion && (
+                <div className="space-y-1.5">
+                  <AiBadge
+                    text={`${[
+                      ...markupSuggestion.matchedTags.map((p) => `"${p.tag}"`),
+                      ...(markupSuggestion.matchedSeason ? [markupSuggestion.matchedSeason.name] : []),
+                    ].join(' + ')} suggests ${currencySymbol}${markupSuggestion.suggestedPrice.toFixed(2)} instead.`}
+                  />
+                  <button
+                    onClick={() => {
+                      setSalePriceTouched(true);
+                      setDraft((d) => ({ ...d, salePrice: markupSuggestion.suggestedPrice }));
+                    }}
+                    className="text-xs font-medium text-accent-600 hover:text-accent-700 transition"
+                  >
+                    Use this price
+                  </button>
+                </div>
               )}
 
               {/* Quality tiers — only relevant once buying as a batch */}
@@ -988,7 +1125,7 @@ export function AddSheet({
                 onClick={() => setMoreOpen((v) => !v)}
                 className="w-full flex items-center justify-center gap-1 pt-1 text-sm font-medium text-accent-600 hover:text-accent-700 transition"
               >
-                <span>{moreOpen ? '− Fewer details' : '+ More details'}</span>
+                <span>{moreOpen ? t('addItemMoreDetailsOpen') : t('addItemMoreDetailsClosed')}</span>
               </button>
             </div>
 
@@ -1053,6 +1190,130 @@ export function AddSheet({
                     className="input"
                   />
                 </Field>
+
+                {/* B2/B3 (tuvara-sasongspaslag-analys.md) — free text with
+                    the tenant's presets as suggestions (datalist), not a
+                    closed picker: a seller can type something not in her
+                    own list yet. Feeds the markup suggestion above and,
+                    once added, is fully seller-editable in Settings. */}
+                <Field label="Season / occasion (optional)">
+                  <input
+                    list="tuvara-season-presets"
+                    value={draft.season ?? ''}
+                    onChange={(e) => setDraft({ ...draft, season: e.target.value.trim() ? e.target.value : undefined })}
+                    placeholder="E.g. Valentine's Day"
+                    className="input"
+                  />
+                  <datalist id="tuvara-season-presets">
+                    {resolvedSeasonPresets.map((p) => (
+                      <option key={p.id} value={p.name} />
+                    ))}
+                  </datalist>
+                </Field>
+
+                {/* B9 (tuvara-bifogade-filer-analys.md) — a small, fixed,
+                    generic palette (colorPalette.ts), never industry
+                    vocabulary. Optional; also feeds bundleSuggestions.ts. */}
+                <Field label="Colour (optional)">
+                  <div className="flex flex-wrap gap-2">
+                    {COLOR_PALETTE.map((c) => {
+                      const active = draft.color === c.name;
+                      return (
+                        <button
+                          key={c.name}
+                          type="button"
+                          onClick={() => setDraft({ ...draft, color: active ? undefined : c.name })}
+                          title={c.name}
+                          aria-pressed={active}
+                          className={`h-8 w-8 rounded-full border-2 transition ${
+                            active ? 'border-accent-500 scale-110' : 'border-stone-200'
+                          }`}
+                          style={{ background: c.swatch }}
+                        />
+                      );
+                    })}
+                  </div>
+                </Field>
+
+                {/* tuvara-visuell-lonsamhet-analys.md — clusters this item
+                    with others of the same style (different colour/size)
+                    in StockList, e.g. "6 variants · 14 total". Free text
+                    with existing group names as suggestions (datalist), same
+                    "explicit, seller-typed, never inferred" discipline as
+                    Season/occasion above — matching by exact string is
+                    honest about what it's doing, unlike guessing from the
+                    item name. */}
+                <Field label="Variant group (optional)">
+                  <input
+                    list="tuvara-variant-groups"
+                    value={draft.variantGroup ?? ''}
+                    onChange={(e) =>
+                      setDraft({ ...draft, variantGroup: e.target.value.trim() ? e.target.value : undefined })
+                    }
+                    placeholder="E.g. Cotton batik three-piece"
+                    className="input"
+                  />
+                  <datalist id="tuvara-variant-groups">
+                    {existingVariantGroups.map((g) => (
+                      <option key={g} value={g} />
+                    ))}
+                  </datalist>
+                  <p className="mt-1 text-[11px] text-stone-400 leading-snug">
+                    Use the same name as another item (e.g. a different colour of the same style) to
+                    show them grouped together in Stock.
+                  </p>
+                </Field>
+
+                {/* B4 (tuvara-bifogade-filer-analys.md) — a standing bulk
+                    price, never applied silently: QuoteCard only ever
+                    suggests switching to it once a cart line's quantity
+                    reaches the threshold, and the seller taps to apply. */}
+                <div>
+                  <span className="block text-xs font-medium text-stone-500 mb-1.5">
+                    Bulk price (optional)
+                  </span>
+                  <p className="mb-2 text-[11px] text-stone-400 leading-snug">
+                    Buy this many or more, pay a lower price each — suggested at checkout, never
+                    applied automatically.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="At quantity">
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={draft.bulkThreshold ?? ''}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 0;
+                          setDraft({ ...draft, bulkThreshold: value > 0 ? value : undefined });
+                        }}
+                        placeholder="e.g. 5"
+                        className="input"
+                      />
+                    </Field>
+                    <Field label={`Price each (${currencySymbol})`}>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={draft.bulkUnitPrice ?? ''}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value) || 0;
+                          setDraft({ ...draft, bulkUnitPrice: value > 0 ? value : undefined });
+                        }}
+                        placeholder="e.g. 8"
+                        className="input"
+                      />
+                    </Field>
+                  </div>
+                  {draft.bulkThreshold &&
+                    draft.bulkUnitPrice &&
+                    draft.salePrice > 0 &&
+                    draft.bulkUnitPrice >= draft.salePrice && (
+                      <p className="mt-1.5 text-[11px] text-amber-600 leading-snug">
+                        This isn't lower than the regular price ({draft.salePrice} {currencySymbol}) —
+                        won't look like a deal to a buyer.
+                      </p>
+                    )}
+                </div>
 
                 {/* Sales channels — dynamic list */}
                 <div>
@@ -1242,6 +1503,30 @@ export function AddSheet({
               Added to stock — here's copy ready to post.
             </div>
 
+            <div className="mb-3">
+              <span className="block text-xs font-medium text-stone-500 mb-1.5">Write in</span>
+              <div className="flex gap-1.5">
+                {(['en', 'bn'] as Lang[]).map((l) => (
+                  <button
+                    key={l}
+                    onClick={() => setCopyLang(l)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold transition active:scale-95 ${
+                      copyLang === l
+                        ? 'bg-accent-500 text-white'
+                        : 'bg-white border border-stone-200 text-stone-600 hover:border-stone-300'
+                    }`}
+                  >
+                    {l === 'en' ? 'English' : 'বাংলা'}
+                  </button>
+                ))}
+              </div>
+              {copyLang === 'bn' && (
+                <p className="mt-1.5 text-[11px] text-amber-600 leading-snug">
+                  Bangla wording not yet reviewed by a native speaker — check before posting.
+                </p>
+              )}
+            </div>
+
             {draft.channels.length > 0 && (
               <div className="mb-3">
                 <span className="block text-xs font-medium text-stone-500 mb-1.5">Write for</span>
@@ -1320,7 +1605,7 @@ export function AddSheet({
                 disabled={!draft.name.trim()}
                 className="w-full h-12 rounded-full bg-accent-500 text-white font-semibold text-sm shadow-fab hover:bg-accent-600 active:scale-[0.98] transition disabled:opacity-40 disabled:shadow-none"
               >
-                {editItem ? 'Save changes' : 'Save'}
+                {editItem ? t('addItemSaveChanges') : t('addItemSave')}
               </button>
               {editItem && (
                 deleteConfirmOpen ? (
@@ -1357,6 +1642,60 @@ export function AddSheet({
         </div>
       )}
     </Sheet>
+  );
+}
+
+/**
+ * A plain horizontal bar splitting this item's sale price into the cost
+ * portion (the "zero point" — what you need back just to break even on this
+ * one item) and the profit portion. tuvara-visuell-lonsamhet-analys.md,
+ * avsnitt 4 — the "visual paperslip" idea, scoped to a single item's own
+ * price rather than reusing the business-wide classic break-even (that one
+ * needs fixed costs and stays in Business Health; mixing the two would
+ * conflate two genuinely different questions). Purely derived from numbers
+ * already on the draft — no new data, no AI badge needed.
+ */
+function PriceBreakdownBar({
+  purchasePrice,
+  salePrice,
+  currencySymbol,
+}: {
+  purchasePrice: number;
+  salePrice: number;
+  currencySymbol: string;
+}) {
+  const profit = salePrice - purchasePrice;
+  const atALoss = profit < 0;
+  // When selling at a loss there's no "profit segment" to show at all —
+  // the whole bar is cost you won't fully recover, so it renders as one
+  // solid red bar rather than a misleading grey/green split.
+  const costPct = atALoss ? 100 : Math.max(0, Math.min(100, (purchasePrice / salePrice) * 100));
+  const profitPct = 100 - costPct;
+
+  return (
+    <div className="rounded-xl border border-stone-200 bg-white p-3">
+      <div className="flex items-center justify-between text-[11px] font-medium text-stone-500 mb-1.5">
+        <span>Cost: {purchasePrice.toFixed(2)} {currencySymbol}</span>
+        <span className={atALoss ? 'text-red-600' : 'text-emerald-600'}>
+          {atALoss ? 'Loss' : 'Profit'}: {profit.toFixed(2)} {currencySymbol}
+        </span>
+      </div>
+      <div className="h-3 w-full rounded-full overflow-hidden bg-stone-100 flex">
+        <div
+          className={`h-full ${atALoss ? 'bg-red-400' : 'bg-stone-400'}`}
+          style={{ width: `${costPct}%` }}
+          title="Cost — this is your zero point"
+        />
+        {!atALoss && (
+          <div className="h-full bg-emerald-400" style={{ width: `${profitPct}%` }} title="Profit" />
+        )}
+      </div>
+      <p className="mt-1.5 text-[11px] text-stone-400 leading-snug">
+        {atALoss
+          ? "This price doesn't cover what you paid — you'd sell at a loss."
+          : 'The grey part is your zero point — what you paid for this item. Everything past it is profit.'}
+      </p>
+    </div>
   );
 }
 

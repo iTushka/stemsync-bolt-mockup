@@ -44,6 +44,14 @@ const FAST_MOVER_SELL_THROUGH = 0.5;
 const MIN_RECENT_SALES_FOR_FAST_MOVER = 2;
 const SLOW_MOVER_STALE_DAYS = 14;
 
+// B6 (tuvara-bifogade-filer-analys.md) — compares this week's margin
+// against the week before, with a plain-language read of what it means,
+// rather than only ever showing a single current-moment number.
+const MARGIN_TREND_WINDOW_DAYS = 7;
+const MARGIN_TREND_MIN_SALES_PER_WINDOW = 2;
+const MARGIN_TREND_FALLING_THRESHOLD = 5; // percentage points
+const MARGIN_TREND_IMPROVING_THRESHOLD = 5; // percentage points
+
 function channelConcentrationInsight(sales: Sale[]): InsightChip | undefined {
   if (sales.length < MIN_SALES_FOR_CHANNEL_SIGNAL) return undefined;
 
@@ -132,6 +140,68 @@ function slowMoverInsight(items: StockItem[], sales: Sale[]): InsightChip | unde
   };
 }
 
+/** Margin (%) for whatever sale lines fall within [fromMs, toMs), matched
+ *  against current item purchase prices — same "unmatched item counts as
+ *  0 cost" convention as computeEarnings, and same "don't show anything
+ *  on too little data" discipline as the other insight functions here. */
+export function windowMarginPct(
+  sales: Sale[],
+  items: StockItem[],
+  fromMs: number,
+  toMs: number
+): number | undefined {
+  const itemsById = new Map(items.map((i) => [i.id, i]));
+  let count = 0;
+  let revenue = 0;
+  let cost = 0;
+  for (const sale of sales) {
+    if (sale.date < fromMs || sale.date >= toMs) continue;
+    count += 1;
+    revenue += sale.total;
+    for (const line of sale.lines) {
+      cost += (itemsById.get(line.itemId)?.purchasePrice ?? 0) * line.quantity;
+    }
+  }
+  if (count < MARGIN_TREND_MIN_SALES_PER_WINDOW || revenue <= 0) return undefined;
+  return Math.round(((revenue - cost) / revenue) * 100);
+}
+
+function marginTrendInsight(items: StockItem[], sales: Sale[]): InsightChip | undefined {
+  const now = Date.now();
+  const recentPct = windowMarginPct(sales, items, now - MARGIN_TREND_WINDOW_DAYS * 86400000, now);
+  const priorPct = windowMarginPct(
+    sales,
+    items,
+    now - MARGIN_TREND_WINDOW_DAYS * 2 * 86400000,
+    now - MARGIN_TREND_WINDOW_DAYS * 86400000
+  );
+  if (recentPct === undefined || priorPct === undefined) return undefined;
+
+  const delta = recentPct - priorPct;
+  if (delta <= -MARGIN_TREND_FALLING_THRESHOLD) {
+    return {
+      id: 'margin-trend',
+      icon: TrendingDown,
+      label: `Margin down ${Math.abs(delta)}pp this week — check costs`,
+      tone: 'warning',
+    };
+  }
+  if (delta >= MARGIN_TREND_IMPROVING_THRESHOLD) {
+    return {
+      id: 'margin-trend',
+      icon: TrendingUp,
+      label: `Margin up ${delta}pp this week`,
+      tone: 'positive',
+    };
+  }
+  return {
+    id: 'margin-trend',
+    icon: TrendingUp,
+    label: `Margin steady around ${recentPct}% — maybe a bundle discount?`,
+    tone: 'positive',
+  };
+}
+
 export function stockInsights(items: StockItem[], sales: Sale[] = []): InsightChip[] {
   const chips: InsightChip[] = [];
 
@@ -165,6 +235,9 @@ export function stockInsights(items: StockItem[], sales: Sale[] = []): InsightCh
 
   const slowMoverChip = slowMoverInsight(items, sales);
   if (slowMoverChip) chips.push(slowMoverChip);
+
+  const marginTrendChip = marginTrendInsight(items, sales);
+  if (marginTrendChip) chips.push(marginTrendChip);
 
   if (chips.length === 0 && items.length > 0) {
     chips.push({ id: 'healthy', icon: TrendingUp, label: 'Stock looks healthy', tone: 'positive' });

@@ -1,4 +1,6 @@
 import { Leaf, ShoppingBag, Tag } from 'lucide-react';
+import { useLanguage } from '../useLanguage';
+import type { StringKey } from '../strings';
 
 interface BottomNavProps {
   active: 'stock' | 'sell' | 'offers';
@@ -6,19 +8,20 @@ interface BottomNavProps {
   cartCount: number;
 }
 
-const TABS: { id: 'stock' | 'sell' | 'offers'; label: string; icon: typeof Leaf }[] = [
-  { id: 'stock', label: 'Stock', icon: Leaf },
-  { id: 'sell', label: 'Sell', icon: ShoppingBag },
-  { id: 'offers', label: 'Offers', icon: Tag },
+const TABS: { id: 'stock' | 'sell' | 'offers'; labelKey: StringKey; icon: typeof Leaf }[] = [
+  { id: 'stock', labelKey: 'navStock', icon: Leaf },
+  { id: 'sell', labelKey: 'navSell', icon: ShoppingBag },
+  { id: 'offers', labelKey: 'navOffers', icon: Tag },
 ];
 
 export function BottomNav({ active, onChange, cartCount }: BottomNavProps) {
+  const { t } = useLanguage();
   return (
     <nav
       className="flex items-center justify-around border-t border-stone-200 bg-cream-50/95 backdrop-blur-md px-2 py-2 safe-bottom"
       aria-label="Main navigation"
     >
-      {TABS.map(({ id, label, icon: Icon }) => {
+      {TABS.map(({ id, labelKey, icon: Icon }) => {
         const isActive = active === id;
         return (
           <button
@@ -30,7 +33,7 @@ export function BottomNav({ active, onChange, cartCount }: BottomNavProps) {
             }`}
           >
             <Icon className={`mb-0.5 h-6 w-6 transition-transform ${isActive ? 'scale-110' : ''}`} />
-            <span className="text-[10px] font-semibold uppercase tracking-wider">{label}</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider">{t(labelKey)}</span>
             {id === 'sell' && cartCount > 0 ? (
               <span className="absolute right-2 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-500 px-1 text-[9px] font-bold text-white">
                 {cartCount}

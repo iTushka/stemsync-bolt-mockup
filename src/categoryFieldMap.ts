@@ -1,4 +1,4 @@
-import type { Category } from './types';
+import type { Category, SeasonPreset } from './types';
 import type { TenantId } from './config';
 
 /**
@@ -53,6 +53,49 @@ export const CATEGORIES_BY_TENANT: Record<TenantId, Category[]> = {
   // broad rather than another bespoke list, since a third specialised
   // tenant per new pilot candidate doesn't scale.
   general: ['Food & Drink', 'Jewellery', 'Clothing & Textiles', 'Home & Décor', 'Accessories', 'Other'],
+};
+
+/**
+ * Lager 3 starter seasons/occasions per tenant (tuvara-sasongspaslag-analys.md,
+ * B2/B3) — confirmed with the pilots: Valentine's Day/Mother's Day/Christmas
+ * for Flowertot (UK, flowers/plants gifting occasions), Eid/Pohela Boishakh/
+ * Wedding season/Puja for Jhum Fashion & Shoilee (Bangladesh, clothing/
+ * jewellery gifting occasions). 'general' is deliberately empty — there's no
+ * shared occasion vocabulary across unrelated general pilots (chilli oil,
+ * misc crafts), so seeding a guess here would be the same "hardcoded list
+ * that fits no one" mistake CLAUDE.md warns about. This is only ever the
+ * *default* a seller starts from — fully editable/extendable in Settings,
+ * never authoritative. boostMultiplier is a starting suggestion (20-25%
+ * range), not a researched optimum — sellers are expected to tune it.
+ */
+export const SEASON_PRESETS_BY_TENANT: Record<TenantId, SeasonPreset[]> = {
+  flowertot: [
+    { id: 'valentines', name: "Valentine's Day", boostMultiplier: 1.25 },
+    { id: 'mothers-day', name: "Mother's Day", boostMultiplier: 1.25 },
+    { id: 'christmas', name: 'Christmas', boostMultiplier: 1.2 },
+  ],
+  jhums: [
+    { id: 'eid', name: 'Eid', boostMultiplier: 1.25 },
+    { id: 'pohela-boishakh', name: 'Pohela Boishakh', boostMultiplier: 1.2 },
+    { id: 'wedding-season', name: 'Wedding season', boostMultiplier: 1.25 },
+    { id: 'puja', name: 'Puja', boostMultiplier: 1.2 },
+  ],
+  general: [],
+};
+
+/**
+ * "Business health" (tuvara-nyckeltal-analys.md) — a tappable list of
+ * common fixed-cost *categories* per tenant, used only to prefill the
+ * label field when a seller adds a fixed cost. This is honestly just a
+ * checklist, not real detection: Tuvara has no bank/POS integration, so
+ * there is no data to actually detect a seller's costs from (see the
+ * "never process payments"/"no external data" principles). Tapping one
+ * never fills in an amount — the seller always types her own number.
+ */
+export const FIXED_COST_SUGGESTIONS_BY_TENANT: Record<TenantId, string[]> = {
+  flowertot: ['Market stall / shop rent', 'Phone & data', 'Delivery / transport', 'Packaging', 'Platform fees'],
+  jhums: ['Shop / stall rent', 'Phone & data', 'Delivery / transport', 'Packaging', 'Tailoring help'],
+  general: ['Rent / stall fee', 'Phone & data', 'Delivery / transport', 'Packaging'],
 };
 
 interface CategoryFieldConfig {

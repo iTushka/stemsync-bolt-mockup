@@ -9,6 +9,11 @@ interface OffersTabProps {
   items: StockItem[];
   currencySymbol: string;
   onCreate: () => void;
+  /** P1 — see tuvara-offers-analys.md: previously a bundle card was inert
+   *  (a plain <div>, no onClick at all) with no way to edit or remove it
+   *  once created. Tapping a card now opens it in BundleBuilder's edit
+   *  mode. */
+  onEditBundle: (bundle: Bundle) => void;
   onGetWhatsAppCard: () => void;
   onAddCustomer: () => void;
   onOpenSettings: () => void;
@@ -19,6 +24,7 @@ export function OffersTab({
   items,
   currencySymbol,
   onCreate,
+  onEditBundle,
   onGetWhatsAppCard,
   onAddCustomer,
   onOpenSettings,
@@ -58,17 +64,22 @@ export function OffersTab({
               const individualTotal = included.reduce((sum, i) => sum + i.salePrice, 0);
               const savings = individualTotal - bundle.bundlePrice;
               return (
-                <div
+                <button
                   key={bundle.id}
-                  className="bg-white rounded-2xl shadow-card p-4"
+                  onClick={() => onEditBundle(bundle)}
+                  className="w-full text-left bg-white rounded-2xl shadow-card p-4 hover:shadow-cardHover active:scale-[0.99] transition"
                 >
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-1.5">
                         <h3 className="font-semibold text-sm text-stone-900">{bundle.name}</h3>
-                        {bundle.onSale && (
+                        {bundle.onSale ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-[10px] font-bold uppercase tracking-wide">
                             <Tag size={10} /> Sale
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-stone-100 text-stone-500 text-[10px] font-bold uppercase tracking-wide">
+                            Not shown to buyers
                           </span>
                         )}
                       </div>
@@ -87,7 +98,7 @@ export function OffersTab({
                       )}
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>

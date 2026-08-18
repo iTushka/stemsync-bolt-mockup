@@ -7,7 +7,9 @@
     -webkit-tap-highlight-color: transparent;
   }
   body {
-    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    /* 'Hind Siliguri' only kicks in for glyphs Inter doesn't cover (Bangla
+       script) — see the EN/BN toggle in Settings and LanguageContext.tsx. */
+    font-family: 'Inter', 'Hind Siliguri', system-ui, -apple-system, 'Segoe UI', sans-serif;
     background-color: #FAF7F2;
     color: #292524;
     -webkit-font-smoothing: antialiased;
@@ -51,5 +53,42 @@
     background-repeat: no-repeat;
     background-position: right 0.75rem center;
     padding-right: 2rem;
+  }
+}
+
+/* Keeps the portaled ReceiptLayout instance (see ReceiptLayout.tsx) off
+   the visible page during normal use. Deliberately a large negative
+   offset rather than opacity/visibility — html-to-image copies computed
+   style when it clones a node, so opacity:0/visibility:hidden on the
+   *captured* node would rasterize as blank. This offset lives on a
+   wrapper *outside* the captured .receipt-print-root node specifically so
+   the capture itself never inherits it (own `position` isn't set on that
+   node, so it stays static there regardless of this ancestor). */
+.receipt-offscreen-wrapper {
+  position: fixed;
+  top: 0;
+  left: -9999px;
+  pointer-events: none;
+}
+
+/* Real receipt print support (was previously a bare window.print() with no
+   rules at all, printing the whole app UI). ReceiptLayout.tsx portals
+   directly to document.body, as a sibling of #root rather than a
+   descendant of it — so hiding #root outright (instead of a broad
+   `body * { visibility: hidden }` sweep) is enough to leave only the
+   receipt, and avoids the app's full on-screen height reserving extra
+   blank printed pages the way `visibility: hidden` (which still occupies
+   layout space) would. The actual page size/width/font-size per paper
+   format is injected at print time by printFormats.ts, since @page can't
+   be reliably scoped to a class selector across browsers. */
+@media print {
+  #root {
+    display: none !important;
+  }
+  .receipt-offscreen-wrapper {
+    /* Bring the wrapper back into normal flow so it prints where it
+       naturally sits instead of at its off-screen fixed offset. */
+    position: static !important;
+    left: auto !important;
   }
 }
