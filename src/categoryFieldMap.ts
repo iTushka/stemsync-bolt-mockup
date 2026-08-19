@@ -93,9 +93,19 @@ export const SEASON_PRESETS_BY_TENANT: Record<TenantId, SeasonPreset[]> = {
  * never fills in an amount — the seller always types her own number.
  */
 export const FIXED_COST_SUGGESTIONS_BY_TENANT: Record<TenantId, string[]> = {
-  flowertot: ['Market stall / shop rent', 'Phone & data', 'Delivery / transport', 'Packaging', 'Platform fees'],
-  jhums: ['Shop / stall rent', 'Phone & data', 'Delivery / transport', 'Packaging', 'Tailoring help'],
-  general: ['Rent / stall fee', 'Phone & data', 'Delivery / transport', 'Packaging'],
+  flowertot: ['Market stall / shop rent', 'Phone & data', 'Delivery / transport', 'Packaging', 'Platform fees', 'Salaries'],
+  jhums: ['Shop / stall rent', 'Phone & data', 'Delivery / transport', 'Packaging', 'Tailoring help', 'Salaries'],
+  general: ['Rent / stall fee', 'Phone & data', 'Delivery / transport', 'Packaging', 'Salaries'],
+};
+
+/** Same "tappable category, seller fills in her own amount" pattern as
+ *  FIXED_COST_SUGGESTIONS_BY_TENANT above, for one-off VariableCostEntry
+ *  costs instead of recurring ones — see
+ *  tuvara-app-personal-moms-butiker-kostnader-insights-analys.md punkt 4. */
+export const VARIABLE_COST_SUGGESTIONS_BY_TENANT: Record<TenantId, string[]> = {
+  flowertot: ['Shipping for an order', 'One-off packaging buy', 'Repair / replacement'],
+  jhums: ['Shipping for an order', 'One-off fabric buy', 'Repair / replacement'],
+  general: ['Shipping for an order', 'One-off supply buy', 'Repair / replacement'],
 };
 
 interface CategoryFieldConfig {

@@ -111,6 +111,17 @@ export interface StockItem {
    *  one" isn't useful. Purely a display grouping — never affects
    *  filtering, stock counts, or sale logic. */
   variantGroup?: string;
+  /** Optional tag to one of AppSettings.shopNames (max 3) — see
+   *  tuvara-app-personal-moms-butiker-kostnader-insights-analys.md punkt 3.
+   *  Deliberately the "simple tag" reading of "flera butiker", not real
+   *  separate inventories: the stock list stays ONE shared list, this just
+   *  lets it be filtered/grouped per named shop the same way periodId
+   *  already lets it be filtered per period. Undefined is the normal case
+   *  for anyone who hasn't named a second shop yet. Full separate-inventory
+   *  "flera butiker" stays a deliberately open, bigger architecture
+   *  question — see product-decisions.md's aggregator/cooperative-mode
+   *  note. */
+  shop?: string;
 }
 
 /** Lager 2 (tuvara-sasongspaslag-analys.md) — a seller-defined tag →
@@ -280,6 +291,26 @@ export interface AppSettings {
    *  starter list is the default without needing a migration. */
   markupPresets?: MarkupPreset[];
   seasonPresets?: SeasonPreset[];
+  /** Moms/VAT (tuvara-app-personal-moms-butiker-kostnader-insights-analys.md
+   *  punkt 2). `vatEnabled` off by default — undefined-safe for settings
+   *  persisted before this field existed (read as `settings.vatEnabled ??
+   *  false`). `vatRatePct` is always seller-typed, never a guessed/seeded
+   *  default (same discipline as markupPresets/FixedCostEntry) — Tuvara
+   *  never suggests a rate. The seller herself decides whether her prices
+   *  already include VAT or not; this toggle *is* that decision, not a
+   *  market-by-market rule Tuvara imposes. When on, prices are treated as
+   *  VAT-inclusive and the VAT portion is shown as a separate line — see
+   *  vat.ts. */
+  vatEnabled?: boolean;
+  vatRatePct?: number;
+  /** Named shops/showrooms (max MAX_SHOPS, see config.ts) — see
+   *  tuvara-app-personal-moms-butiker-kostnader-insights-analys.md punkt 3.
+   *  Undefined/empty = no shop tagging in use yet, the common case.
+   *  Deliberately just names, not a real location/entity model — see
+   *  StockItem.shop's doc comment. During the pilot this is a fixed UX
+   *  cap (MAX_SHOPS), flagged as a likely future premium-tier limit
+   *  rather than a permanent ceiling — see the same doc, fråga 4. */
+  shopNames?: string[];
 }
 
 export const defaultSettings: AppSettings = {
@@ -292,6 +323,7 @@ export const defaultSettings: AppSettings = {
   website: '',
   socialLinks: [],
   printFormat: 'a4',
+  vatEnabled: false,
 };
 
 /**
@@ -358,12 +390,75 @@ export interface FixedCostEntry {
   createdAt: number;
 }
 
+/** A one-off, non-recurring cost the seller logs herself — shipping for a
+ *  single order, a one-time packaging buy, an unplanned repair. The
+ *  variable-cost counterpart to FixedCostEntry: same shape, minus
+ *  `cadence` (nothing recurs here), plus `loggedAt` instead of
+ *  `createdAt` for consistency with AdSpendEntry's naming. Generalises
+ *  the `AdSpendEntry` pattern from "only ad spend" to "any one-off
+ *  business cost" — see tuvara-app-personal-moms-butiker-kostnader-insights-analys.md
+ *  punkt 4. Same "no guessed number" discipline as every other cost log
+ *  in this file: the seller always types her own amount. */
+export interface VariableCostEntry {
+  id: string;
+  label: string;
+  amount: number;
+  loggedAt: number;
+}
+
 export type TeamRole = 'Owner' | 'Staff';
 
 export interface TeamUser {
   id: string;
   name: string;
   role: TeamRole;
+  /** Optional 4-digit code — see
+   *  tuvara-app-personal-moms-butiker-kostnader-insights-analys.md punkt 1
+   *  (väg A, "mjuk PIN-spärr"). Stored locally like everything else in
+   *  this app; NOT cryptographic security, just a nudge against a wrong
+   *  person opening someone else's name by accident. Owner can always
+   *  see/reset any user's code from Settings → Team & roles, so there's
+   *  no separate "forgot PIN" flow. Undefined = no code set, the switch
+   *  is open (the default for a returning user's persisted team). */
+  pin?: string;
+}
+
+/** In-app record that someone typed their name and tapped "Agree" on the
+ *  Terms of Use and/or the Confidentiality agreement — see legalText.ts
+ *  and LegalAgreementSheet.tsx. Deliberately two independent
+ *  acceptances (not one combined flag): every seller needs the Terms,
+ *  but the Confidentiality agreement is only relevant to someone with
+ *  deeper access (a developer, intern, agent). *Version fields record
+ *  which wording was accepted, so a later text change doesn't silently
+ *  count as agreement to something the signer never saw — same
+ *  "don't guess silently" discipline as the rest of the app. This is a
+ *  lightweight acknowledgement, not a verified digital signature; see
+ *  LEGAL_SIGNATURE_DISCLAIMER. */
+export interface LegalAcceptance {
+  name: string;
+  termsAcceptedAt?: number;
+  termsVersion?: string;
+  ndaAcceptedAt?: number;
+  ndaVersion?: string;
+}
+
+/** Optional, entirely private business-context the seller can fill in about
+ *  themselves — see docs/tuvara-ai-berattelse-onboarding-analys.md and
+ *  businessProfile.ts. Never required, never sent anywhere: stored the
+ *  same way as everything else (`usePersistentState`, on-device only), and
+ *  used only to power future in-app personalization ("empowerment" /
+ *  "förstå människan bakom verksamheten" — Tushar's stated purpose).
+ *  `note` is free text (option A: a private notebook nobody reads but the
+ *  seller). `customerType`/`mainChallenge` are short preset choices
+ *  (option B), not AI-guessed — same transparent, regel-baserad pattern as
+ *  categoryFieldMap.ts. See businessProfile.ts's CHALLENGE_KEYWORDS for
+ *  the one place a *suggestion* (never authoritative) is derived from
+ *  `note`. */
+export interface BusinessProfile {
+  note: string;
+  customerType?: string;
+  mainChallenge?: string;
+  updatedAt?: number;
 }
 
 export interface CartLine {

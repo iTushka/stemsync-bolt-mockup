@@ -1,9 +1,11 @@
 import { useState, useRef } from 'react';
-import { Plus, Trash2, RotateCcw, Download, Upload, Image as ImageIcon, Layers } from 'lucide-react';
+import { Plus, Trash2, RotateCcw, Download, Upload, Image as ImageIcon, Layers, FileCheck, ShieldCheck, Sparkles, Check, Lock } from 'lucide-react';
 import { Sheet } from './Sheet';
 import { clearTenantStorage, exportTenantData, importTenantData } from '../usePersistentState';
 import type {
   AppSettings,
+  LegalAcceptance,
+  BusinessProfile,
   MarkupPreset,
   PrintFormat,
   SeasonPreset,
@@ -12,9 +14,11 @@ import type {
   StockPeriod,
   TeamUser,
 } from '../types';
+import { TERMS_VERSION, NDA_VERSION } from '../legalText';
+import { hasBusinessProfileContent } from '../businessProfile';
 import { CURRENT_STOCK_SENTINEL } from '../types';
 import { REFERENCE_CURRENCIES, daysSinceUpdate, isRateStale, type CurrencyCode } from '../exchangeRates';
-import { PILOT_SLUG, isDemoPilot, TENANT } from '../config';
+import { PILOT_SLUG, isDemoPilot, TENANT, MAX_SHOPS, MAX_STAFF } from '../config';
 import { useLanguage } from '../useLanguage';
 import { PRINT_FORMATS } from '../printFormats';
 import { SEASON_PRESETS_BY_TENANT } from '../categoryFieldMap';
@@ -28,6 +32,11 @@ interface SettingsSheetProps {
   onChange: (settings: AppSettings) => void;
   team: TeamUser[];
   onTeamChange: (team: TeamUser[]) => void;
+  /** Who's currently using the app on this device — see
+   *  tuvara-app-personal-moms-butiker-kostnader-insights-analys.md punkt 1
+   *  and 5. A trust-based switch for now, not PIN-gated yet. */
+  activeUserId: string;
+  onActiveUserChange: (id: string) => void;
   /** Stock periods — see tuvara-perioder-analys.md. This "Stock periods"
    *  section is the one always-visible entry point into the feature;
    *  nothing elsewhere in the app (Stock's period chips, new items'
@@ -36,6 +45,17 @@ interface SettingsSheetProps {
   items: StockItem[];
   periods: StockPeriod[];
   onStartPeriod: (name: string, copyFromPeriodId?: string) => void;
+  /** Terms of Use / Confidentiality acceptance status — see
+   *  legalText.ts and LegalAgreementSheet.tsx. This row is the permanent
+   *  entry point to sign or review, whether or not the on-Stock hint
+   *  (LegalAcceptanceHint) has been dismissed. */
+  legalAcceptance: LegalAcceptance | null;
+  onOpenLegal: () => void;
+  /** "About your business" — see BusinessProfileHint.tsx and
+   *  businessProfile.ts. This row is the permanent entry point, whether or
+   *  not the on-Stock hint has been dismissed. */
+  businessProfile: BusinessProfile | null;
+  onOpenBusinessProfile: () => void;
 }
 
 const CURRENCIES = ['kr', '£', '$', '৳', '€'];
@@ -47,11 +67,23 @@ export function SettingsSheet({
   onChange,
   team,
   onTeamChange,
+  activeUserId,
+  onActiveUserChange,
   items,
   periods,
   onStartPeriod,
+  legalAcceptance,
+  onOpenLegal,
+  businessProfile,
+  onOpenBusinessProfile,
 }: SettingsSheetProps) {
   const [newUserName, setNewUserName] = useState('');
+  const [newShopName, setNewShopName] = useState('');
+  // PIN-gated switch (väg A) — see updateUserPin/addUser below and
+  // tuvara-app-personal-moms-butiker-kostnader-insights-analys.md punkt 1.
+  const [pendingSwitchUserId, setPendingSwitchUserId] = useState<string | null>(null);
+  const [pinAttempt, setPinAttempt] = useState('');
+  const [pinError, setPinError] = useState(false);
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoFileInputRef = useRef<HTMLInputElement>(null);
@@ -99,8 +131,14 @@ export function SettingsSheet({
     update({ exchangeRates: nextRates });
   };
 
+  // Max MAX_STAFF Staff accounts — punkt 1,
+  // tuvara-app-personal-moms-butiker-kostnader-insights-analys.md. Owner
+  // isn't counted/capped; there's normally exactly one.
+  const staffCount = team.filter((u) => u.role === 'Staff').length;
+  const staffLimitReached = staffCount >= MAX_STAFF;
+
   const addUser = () => {
-    if (!newUserName.trim()) return;
+    if (!newUserName.trim() || staffLimitReached) return;
     onTeamChange([
       ...team,
       { id: Math.random().toString(36).slice(2, 9), name: newUserName.trim(), role: 'Staff' },
@@ -109,6 +147,48 @@ export function SettingsSheet({
   };
 
   const removeUser = (id: string) => onTeamChange(team.filter((u) => u.id !== id));
+
+  const updateUserPin = (id: string, pin: string) =>
+    onTeamChange(team.map((u) => (u.id === id ? { ...u, pin: pin || undefined } : u)));
+
+  // Tapping a name: switches immediately if it's already active or has no
+  // PIN set; otherwise opens the inline PIN prompt for that row. Owner can
+  // always see/reset any code right here in this same list, so there's no
+  // separate "forgot PIN" flow to build — see TeamUser.pin's doc comment.
+  const handleTapUser = (u: TeamUser) => {
+    if (u.id === activeUserId) return;
+    if (!u.pin) {
+      onActiveUserChange(u.id);
+      return;
+    }
+    setPendingSwitchUserId(u.id);
+    setPinAttempt('');
+    setPinError(false);
+  };
+
+  const handleConfirmSwitch = (u: TeamUser) => {
+    if (pinAttempt === u.pin) {
+      onActiveUserChange(u.id);
+      setPendingSwitchUserId(null);
+      setPinAttempt('');
+      setPinError(false);
+    } else {
+      setPinError(true);
+    }
+  };
+
+  // Shops/showrooms — see
+  // tuvara-app-personal-moms-butiker-kostnader-insights-analys.md punkt 3.
+  // Just names, capped at MAX_SHOPS (config.ts) — the "simple tag" reading
+  // of "flera butiker", not a real multi-location model.
+  const shopNames = settings.shopNames ?? [];
+  const addShop = () => {
+    const name = newShopName.trim();
+    if (!name || shopNames.length >= MAX_SHOPS || shopNames.includes(name)) return;
+    update({ shopNames: [...shopNames, name] });
+    setNewShopName('');
+  };
+  const removeShop = (name: string) => update({ shopNames: shopNames.filter((s) => s !== name) });
 
   const socialLinks = settings.socialLinks ?? [];
 
@@ -567,49 +647,167 @@ export function SettingsSheet({
 
         <div>
           <span className="block text-xs font-medium text-stone-500 mb-2">
+            Shops ({shopNames.length}/{MAX_SHOPS})
+          </span>
+          <p className="mb-2 text-[11px] text-stone-400 leading-snug">
+            One shared stock list, tagged and filterable per shop — not separate inventories.
+          </p>
+          {shopNames.length > 0 && (
+            <div className="space-y-1.5 mb-2">
+              {shopNames.map((name) => (
+                <div
+                  key={name}
+                  className="flex items-center justify-between rounded-xl border border-stone-200 bg-white px-3 py-2.5"
+                >
+                  <span className="text-sm font-semibold text-stone-800">{name}</span>
+                  <button
+                    onClick={() => removeShop(name)}
+                    aria-label="Remove shop"
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-red-500 transition"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {shopNames.length < MAX_SHOPS ? (
+            <div className="flex gap-2">
+              <input
+                value={newShopName}
+                onChange={(e) => setNewShopName(e.target.value)}
+                placeholder="e.g. Showroom 2"
+                className="input flex-1"
+              />
+              <button
+                onClick={addShop}
+                disabled={!newShopName.trim()}
+                className="w-11 h-11 shrink-0 rounded-xl bg-accent-500 text-white flex items-center justify-center disabled:opacity-40 active:scale-95 transition"
+                aria-label="Add shop"
+              >
+                <Plus size={18} />
+              </button>
+            </div>
+          ) : (
+            <p className="text-[11px] text-stone-400">Limit of {MAX_SHOPS} shops reached.</p>
+          )}
+        </div>
+
+        <div>
+          <span className="block text-xs font-medium text-stone-500 mb-2">
             Team & roles
           </span>
+          <p className="mb-2 text-[11px] text-stone-400 leading-snug">
+            Tap a name to switch who's currently using this device. Set a PIN below to ask for
+            it before switching to that person — a soft check against a wrong tap, not real
+            security.
+          </p>
           <div className="space-y-1.5">
             {team.map((u) => (
               <div
                 key={u.id}
-                className="flex items-center justify-between rounded-xl border border-stone-200 bg-white px-3 py-2.5"
+                className="rounded-xl border border-stone-200 bg-white px-3 py-2.5"
               >
-                <span className="text-sm font-semibold text-stone-800">{u.name}</span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between">
                   <button
-                    onClick={() => toggleRole(u.id)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold transition ${
-                      u.role === 'Owner'
-                        ? 'bg-accent-100 text-accent-700'
-                        : 'bg-stone-100 text-stone-600'
-                    }`}
+                    onClick={() => handleTapUser(u)}
+                    className="flex items-center gap-1.5 min-w-0"
                   >
-                    {u.role}
+                    {u.id === activeUserId && (
+                      <Check size={14} className="text-accent-500 shrink-0" />
+                    )}
+                    <span className="text-sm font-semibold text-stone-800 truncate">{u.name}</span>
+                    {u.pin && <Lock size={11} className="text-stone-300 shrink-0" />}
                   </button>
-                  {u.role !== 'Owner' && (
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => removeUser(u.id)}
-                      aria-label="Remove user"
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-red-500 transition"
+                      onClick={() => toggleRole(u.id)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition ${
+                        u.role === 'Owner'
+                          ? 'bg-accent-100 text-accent-700'
+                          : 'bg-stone-100 text-stone-600'
+                      }`}
                     >
-                      <Trash2 size={14} />
+                      {u.role}
                     </button>
-                  )}
+                    {u.role !== 'Owner' && (
+                      <button
+                        onClick={() => removeUser(u.id)}
+                        aria-label="Remove user"
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-red-500 transition"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {/* PIN management — visible to whoever can open Settings
+                    (normally Owner), same "no separate forgot-PIN flow"
+                    reasoning as handleTapUser above. */}
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <span className="text-[11px] text-stone-400 shrink-0">PIN</span>
+                  <input
+                    value={u.pin ?? ''}
+                    onChange={(e) => updateUserPin(u.id, e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    inputMode="numeric"
+                    placeholder="none set"
+                    className="w-20 text-xs px-2 py-1 rounded-lg border border-stone-200 bg-cream-50"
+                  />
+                  <span className="text-[10px] text-stone-300">4 digits, optional</span>
+                </div>
+
+                {/* Inline PIN prompt for switching to a code-protected user
+                    — see handleTapUser/handleConfirmSwitch above. */}
+                {pendingSwitchUserId === u.id && (
+                  <div className="mt-2 flex items-center gap-1.5 animate-fadeIn">
+                    <input
+                      value={pinAttempt}
+                      onChange={(e) => {
+                        setPinAttempt(e.target.value.replace(/\D/g, '').slice(0, 4));
+                        setPinError(false);
+                      }}
+                      inputMode="numeric"
+                      placeholder="Enter PIN"
+                      autoFocus
+                      className={`w-24 text-xs px-2 py-1.5 rounded-lg border ${
+                        pinError ? 'border-red-400' : 'border-stone-200'
+                      }`}
+                    />
+                    <button
+                      onClick={() => handleConfirmSwitch(u)}
+                      className="px-2.5 py-1.5 rounded-lg bg-accent-500 text-white text-xs font-semibold"
+                    >
+                      Switch
+                    </button>
+                    <button
+                      onClick={() => setPendingSwitchUserId(null)}
+                      className="px-2 py-1.5 text-xs text-stone-400"
+                    >
+                      Cancel
+                    </button>
+                    {pinError && <span className="text-[11px] text-red-500">Wrong PIN</span>}
+                  </div>
+                )}
               </div>
             ))}
           </div>
+          {staffLimitReached && (
+            <p className="mt-2 text-[11px] text-amber-600">
+              Limit of {MAX_STAFF} Staff accounts reached — remove one to add another.
+            </p>
+          )}
           <div className="mt-2 flex gap-2">
             <input
               value={newUserName}
               onChange={(e) => setNewUserName(e.target.value)}
               placeholder="Add team member name"
-              className="input flex-1"
+              disabled={staffLimitReached}
+              className="input flex-1 disabled:opacity-50"
             />
             <button
               onClick={addUser}
-              disabled={!newUserName.trim()}
+              disabled={!newUserName.trim() || staffLimitReached}
               className="w-11 h-11 shrink-0 rounded-xl bg-accent-500 text-white flex items-center justify-center disabled:opacity-40 active:scale-95 transition"
               aria-label="Add team member"
             >
@@ -643,6 +841,55 @@ export function SettingsSheet({
               />
             </span>
           </button>
+        </div>
+
+        <div className="pt-2 border-t border-stone-100">
+          <button
+            onClick={() => update({ vatEnabled: !settings.vatEnabled })}
+            className="flex w-full items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5"
+          >
+            <div className="text-left">
+              <span className="block text-sm font-medium text-stone-700">
+                Include VAT in prices
+              </span>
+              <span className="block text-[11px] text-stone-400">
+                Your call — Tuvara doesn't decide this for you or by market
+              </span>
+            </div>
+            <span
+              className={`shrink-0 relative w-9 h-5 rounded-full transition ${
+                settings.vatEnabled ? 'bg-accent-500' : 'bg-stone-200'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                  settings.vatEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'
+                }`}
+              />
+            </span>
+          </button>
+          {settings.vatEnabled && (
+            <label className="mt-2 block">
+              <span className="block text-xs font-medium text-stone-500 mb-1">
+                VAT rate (%) — type your own, Tuvara never suggests one
+              </span>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={settings.vatRatePct ?? ''}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  update({ vatRatePct: raw === '' ? undefined : Math.max(0, parseFloat(raw) || 0) });
+                }}
+                placeholder="e.g. 15"
+                className="input"
+              />
+              <span className="block mt-1 text-[11px] text-stone-400">
+                Shown as "of which VAT: X" on the price and on your quote/WhatsApp card —
+                your prices don't change.
+              </span>
+            </label>
+          )}
         </div>
 
         <div className="pt-2 border-t border-stone-100">
@@ -692,6 +939,69 @@ export function SettingsSheet({
               );
             })}
           </div>
+        </div>
+
+        <div className="pt-2 border-t border-stone-100">
+          <span className="block text-xs font-medium text-stone-500 mb-2">
+            Terms &amp; confidentiality
+          </span>
+          <button
+            onClick={onOpenLegal}
+            className="flex w-full items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5"
+          >
+            <div className="flex items-center gap-2 text-left">
+              <FileCheck size={15} className="text-stone-400 shrink-0" />
+              <div>
+                <span className="block text-sm font-medium text-stone-700">Terms of Use</span>
+                <span className="block text-[11px] text-stone-400">
+                  {legalAcceptance?.termsAcceptedAt !== undefined && legalAcceptance.termsVersion === TERMS_VERSION
+                    ? `Signed by ${legalAcceptance.name} on ${new Date(legalAcceptance.termsAcceptedAt).toLocaleDateString()}`
+                    : 'Not yet signed'}
+                </span>
+              </div>
+            </div>
+            <span className="text-xs font-semibold text-accent-600 shrink-0">Review</span>
+          </button>
+          <button
+            onClick={onOpenLegal}
+            className="mt-1.5 flex w-full items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5"
+          >
+            <div className="flex items-center gap-2 text-left">
+              <ShieldCheck size={15} className="text-stone-400 shrink-0" />
+              <div>
+                <span className="block text-sm font-medium text-stone-700">Confidentiality agreement</span>
+                <span className="block text-[11px] text-stone-400">
+                  {legalAcceptance?.ndaAcceptedAt !== undefined && legalAcceptance.ndaVersion === NDA_VERSION
+                    ? `Signed by ${legalAcceptance.name} on ${new Date(legalAcceptance.ndaAcceptedAt).toLocaleDateString()}`
+                    : 'Only needed for team members with code/document access'}
+                </span>
+              </div>
+            </div>
+            <span className="text-xs font-semibold text-accent-600 shrink-0">Review</span>
+          </button>
+        </div>
+
+        <div className="pt-2 border-t border-stone-100">
+          <span className="block text-xs font-medium text-stone-500 mb-2">About your business</span>
+          <button
+            onClick={onOpenBusinessProfile}
+            className="flex w-full items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5"
+          >
+            <div className="flex items-center gap-2 text-left">
+              <Sparkles size={15} className="text-stone-400 shrink-0" />
+              <div>
+                <span className="block text-sm font-medium text-stone-700">Your notes &amp; profile</span>
+                <span className="block text-[11px] text-stone-400">
+                  {hasBusinessProfileContent(businessProfile)
+                    ? 'Saved — stays on this device only'
+                    : 'Optional — helps Tuvara feel more like it\'s made for you'}
+                </span>
+              </div>
+            </div>
+            <span className="text-xs font-semibold text-accent-600 shrink-0">
+              {hasBusinessProfileContent(businessProfile) ? 'Edit' : 'Add'}
+            </span>
+          </button>
         </div>
 
         <div className="pt-2 border-t border-stone-100">

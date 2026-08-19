@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <clipPath id="tuvara-tile-clip"><rect x="0" y="0" width="100" height="100" rx="12.12"/></clipPath>
+  </defs>
+  <rect x="0" y="0" width="100" height="100" rx="12.12" fill="#26314F"/>
+  <g clip-path="url(#tuvara-tile-clip)">
+    <path d="M-5 14 L105 14" stroke="#F7EEDC" stroke-width="1.4" stroke-dasharray="5 5" opacity="0.16"/>
+    <path d="M-5 30 L105 30" stroke="#F7EEDC" stroke-width="1.4" stroke-dasharray="5 5" opacity="0.16"/>
+    <path d="M-5 86 L105 86" stroke="#F7EEDC" stroke-width="1.4" stroke-dasharray="5 5" opacity="0.16"/>
+    <path d="M-5 -5 L105 105" stroke="#E2A73E" stroke-width="1.4" stroke-dasharray="5 6" opacity="0.2"/>
+    <path d="M-5 35 L65 105" stroke="#E2A73E" stroke-width="1.4" stroke-dasharray="5 6" opacity="0.2"/>
+    <path d="M35 -5 L105 65" stroke="#E2A73E" stroke-width="1.4" stroke-dasharray="5 6" opacity="0.2"/>
+    <path d="M105 -5 L-5 105" stroke="#F7EEDC" stroke-width="1.4" stroke-dasharray="5 6" opacity="0.14"/>
+    <path d="M65 -5 L-5 65" stroke="#F7EEDC" stroke-width="1.4" stroke-dasharray="5 6" opacity="0.14"/>
+    <path d="M105 35 L35 105" stroke="#F7EEDC" stroke-width="1.4" stroke-dasharray="5 6" opacity="0.14"/>
+  </g>
+  <g transform="translate(13.64,13.64) scale(0.7273)" fill="none">
+    <path d="M17 83 Q29 77 42 69" stroke="#E2A73E" stroke-width="5" stroke-dasharray="8 7" stroke-linecap="round"/>
+    <circle cx="13" cy="86" r="4.5" fill="#E2A73E"/>
+    <path d="M45 68 Q61 67 77 66" stroke="#F7EEDC" stroke-width="4" stroke-dasharray="6.5 6" stroke-linecap="round" opacity="0.6"/>
+    <path d="M45 67 Q61 61 76 54" stroke="#F7EEDC" stroke-width="4.2" stroke-dasharray="6.5 6" stroke-linecap="round" opacity="0.8"/>
+    <path d="M44 66 Q58 52 72 39" stroke="#F7EEDC" stroke-width="4.4" stroke-dasharray="7 6" stroke-linecap="round"/>
+    <path d="M43 65 Q53 46 62 27" stroke="#F7EEDC" stroke-width="4.2" stroke-dasharray="6.5 6" stroke-linecap="round" opacity="0.8"/>
+    <path d="M42 64 Q45 41 47 19" stroke="#F7EEDC" stroke-width="4" stroke-dasharray="6.5 6" stroke-linecap="round" opacity="0.6"/>
+    <path d="M50 60 Q66 47 78 30" stroke="#E2A73E" stroke-width="2.2" stroke-dasharray="4 5" stroke-linecap="round" opacity="0.55"/>
+    <circle cx="81" cy="66" r="4" fill="#E2A73E" opacity="0.7"/>
+    <circle cx="80" cy="52" r="4.6" fill="#E2A73E" opacity="0.85"/>
+    <circle cx="76" cy="35" r="6.6" fill="#E2A73E"/>
+    <circle cx="65" cy="22" r="4.6" fill="#E2A73E" opacity="0.85"/>
+    <circle cx="48" cy="14" r="4" fill="#E2A73E" opacity="0.7"/>
+  </g>
+</svg>

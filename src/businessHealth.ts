@@ -1,4 +1,4 @@
-import type { AdSpendEntry, Customer, FixedCostEntry, OwedEntry, Sale, StockItem } from './types';
+import type { AdSpendEntry, Customer, FixedCostEntry, OwedEntry, Sale, StockItem, VariableCostEntry } from './types';
 import { computeEarnings } from './earnings';
 import { windowMarginPct } from './insights';
 
@@ -156,6 +156,143 @@ export function computeWorkingCapitalLite(
   const liabilities = owed.filter((o) => !o.settledAt).reduce((sum, o) => sum + o.amount, 0);
   const assets = stockValue + outstandingDebts;
   return { assets, liabilities, net: assets - liabilities };
+}
+
+export interface ActualProfitSummary {
+  windowDays: number;
+  revenue: number;
+  costOfGoods: number;
+  /** Fixed costs, prorated down from their weekly/monthly cadence to this
+   *  window — see FixedCostEntry.cadence. */
+  fixedCosts: number;
+  /** Sum of VariableCostEntry amounts logged within the window. */
+  variableCosts: number;
+  /** revenue − costOfGoods − fixedCosts − variableCosts — "Din faktiska
+   *  vinst" (tuvara-app-personal-moms-butiker-kostnader-insights-analys.md
+   *  punkt 4). Deliberately plain arithmetic, no accounting terms
+   *  (debit/credit/resultaträkning) — same tone as the rest of Business
+   *  health. Can be negative; that's a real, useful answer too. */
+  actualProfit: number;
+}
+
+const DAYS_PER_MONTH = 365.25 / 12;
+
+/** "Din faktiska vinst" — the one number
+ * tuvara-app-personal-moms-butiker-kostnader-insights-analys.md punkt 4
+ * asked for: revenue minus cost of goods sold minus fixed costs minus
+ * variable costs, all for the same window, in one place. Fixed costs are
+ * prorated from their own cadence (week/month) down to windowDays rather
+ * than requiring the seller to re-enter them per period; variable costs
+ * are summed as-logged within the window since they have no cadence to
+ * prorate. Never guesses a number — every input here is either computed
+ * from logged sales/stock or a cost the seller typed herself. */
+export function computeActualProfit(
+  sales: Sale[],
+  items: StockItem[],
+  fixedCosts: FixedCostEntry[],
+  variableCosts: VariableCostEntry[],
+  windowDays: number
+): ActualProfitSummary {
+  const { revenue, knownCost } = computeEarnings(sales, items, windowDays);
+
+  const fixedForWindow = fixedCosts.reduce((sum, c) => {
+    const dailyRate = c.cadence === 'week' ? c.amount / 7 : c.amount / DAYS_PER_MONTH;
+    return sum + dailyRate * windowDays;
+  }, 0);
+
+  const cutoff = Date.now() - windowDays * 86400000;
+  const variableForWindow = variableCosts
+    .filter((c) => c.loggedAt >= cutoff)
+    .reduce((sum, c) => sum + c.amount, 0);
+
+  return {
+    windowDays,
+    revenue,
+    costOfGoods: knownCost,
+    fixedCosts: fixedForWindow,
+    variableCosts: variableForWindow,
+    actualProfit: revenue - knownCost - fixedForWindow - variableForWindow,
+  };
+}
+
+export type InsightsPeriod = 'day' | 'week' | 'month' | 'year';
+
+const INSIGHTS_PERIOD_DAYS: Record<InsightsPeriod, number> = {
+  day: 1,
+  week: 7,
+  month: 30,
+  year: 365,
+};
+
+export interface TopSeller {
+  itemId: string;
+  name: string;
+  quantity: number;
+  revenue: number;
+}
+
+export interface InsightsSummary {
+  period: InsightsPeriod;
+  windowDays: number;
+  revenue: number;
+  costOfGoods: number;
+  fixedCosts: number;
+  variableCosts: number;
+  profit: number;
+  saleCount: number;
+  topSellers: TopSeller[];
+}
+
+/**
+ * "Insights" (tuvara-app-personal-moms-butiker-kostnader-insights-analys.md
+ * punkt 5) — a period-grouped read on the same numbers already available
+ * elsewhere in Business health (via computeActualProfit), plus top
+ * sellers for the window. Modelled on Flowertot Florist's Friend's
+ * InsightsTab, adapted to Tuvara's own data shapes. Owner-only gating is
+ * a UI concern (see BusinessHealthSheet's isOwner prop), not enforced
+ * here — this function itself has no notion of "who's asking".
+ */
+export function computeInsightsSummary(
+  sales: Sale[],
+  items: StockItem[],
+  fixedCosts: FixedCostEntry[],
+  variableCosts: VariableCostEntry[],
+  period: InsightsPeriod
+): InsightsSummary {
+  const windowDays = INSIGHTS_PERIOD_DAYS[period];
+  const profit = computeActualProfit(sales, items, fixedCosts, variableCosts, windowDays);
+
+  const cutoff = Date.now() - windowDays * 86400000;
+  const inWindow = sales.filter((s) => s.date >= cutoff);
+
+  const byItem = new Map<string, TopSeller>();
+  for (const sale of inWindow) {
+    for (const line of sale.lines) {
+      const existing = byItem.get(line.itemId);
+      const revenue = line.unitPrice * line.quantity;
+      if (existing) {
+        existing.quantity += line.quantity;
+        existing.revenue += revenue;
+      } else {
+        byItem.set(line.itemId, { itemId: line.itemId, name: line.name, quantity: line.quantity, revenue });
+      }
+    }
+  }
+  const topSellers = Array.from(byItem.values())
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+
+  return {
+    period,
+    windowDays,
+    revenue: profit.revenue,
+    costOfGoods: profit.costOfGoods,
+    fixedCosts: profit.fixedCosts,
+    variableCosts: profit.variableCosts,
+    profit: profit.actualProfit,
+    saleCount: inWindow.length,
+    topSellers,
+  };
 }
 
 export interface ClassicBreakEven {

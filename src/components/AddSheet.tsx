@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Mic, MicOff, Sparkles, Plus, Trash2, Check, Camera, AlertTriangle, Copy, CheckCircle2, ImagePlus, Calculator, Layers } from 'lucide-react';
+import { X, Mic, MicOff, Sparkles, Plus, Trash2, Check, Camera, AlertTriangle, Copy, CheckCircle2, ImagePlus, Calculator, Layers, Lock } from 'lucide-react';
 import type { StockItem, Category, SalesChannel, Sale, MarkupPreset, SeasonPreset } from '../types';
 import { margin } from '../types';
 import { parseEntry, createDraftFromParsed, type ParsedEntry } from '../parse';
@@ -15,6 +15,7 @@ import { recordCategoryCorrection } from '../categoryLearning';
 import { TENANT } from '../config';
 import { useSpeechToText } from '../useSpeechToText';
 import { useLanguage } from '../useLanguage';
+import { vatPortionOfPrice } from '../vat';
 import type { Lang } from '../strings';
 import {
   totalUnitsFromBatch,
@@ -59,6 +60,24 @@ interface AddSheetProps {
    *  seasonPresets falls back to SEASON_PRESETS_BY_TENANT[TENANT]. */
   markupPresets?: MarkupPreset[];
   seasonPresets?: SeasonPreset[];
+  /** Moms/VAT display on the suggested price — see vat.ts and Settings'
+   *  "Include VAT in prices" toggle. Purely a display line; never touches
+   *  salePrice itself. */
+  vatEnabled?: boolean;
+  vatRatePct?: number;
+  /** Staff-rättigheter (punkt 1,
+   *  tuvara-app-personal-moms-butiker-kostnader-insights-analys.md) — when
+   *  true, purchase price, markup, margin and any cost breakdown are
+   *  hidden; only quantity and sale price stay editable. A soft UI gate,
+   *  not real access control — see App.tsx's isOwner. Editing an existing
+   *  item under this flag leaves its stored purchasePrice untouched (the
+   *  field is hidden, not cleared). */
+  hideCostInfo?: boolean;
+  /** Named shops (Settings' shopNames) — see
+   *  tuvara-app-personal-moms-butiker-kostnader-insights-analys.md punkt 3.
+   *  Empty by default; the "Shop" field is only shown once the seller has
+   *  named at least one. */
+  shopNames?: string[];
 }
 
 const FREE_CHANNEL_LIMIT = 1;
@@ -107,6 +126,10 @@ export function AddSheet({
   sales = [],
   markupPresets,
   seasonPresets,
+  vatEnabled = false,
+  vatRatePct,
+  shopNames = [],
+  hideCostInfo = false,
 }: AddSheetProps) {
   const { t, lang } = useLanguage();
   const [rawText, setRawText] = useState('');
@@ -714,7 +737,10 @@ export function AddSheet({
               {/* Single disclosure for the three alternate ways of arriving
                   at a purchase price — batch/tray buying, foreign currency,
                   cost-part breakdown. Collapsed by default: a plain single-
-                  item entry never needs to see any of these. */}
+                  item entry never needs to see any of these. Hidden
+                  entirely for hideCostInfo — every path here computes
+                  purchasePrice, which Staff shouldn't see or set. */}
+              {!hideCostInfo && (
               <div>
                 <button
                   onClick={() => setPricingOptionsOpen((v) => !v)}
@@ -880,8 +906,9 @@ export function AddSheet({
                   </div>
                 )}
               </div>
+              )}
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className={hideCostInfo ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
                 <Field label={t('addItemQuantityLabel')}>
                   <input
                     type="number"
@@ -906,48 +933,60 @@ export function AddSheet({
                     </p>
                   )}
                 </Field>
-                <Field label={`${t('addItemPurchasePriceLabel')} (${currencySymbol}/unit)`}>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    value={draft.purchasePrice || ''}
-                    onChange={(e) => {
-                      const value = parseFloat(e.target.value) || 0;
-                      setDraft((d) => ({
-                        ...d,
-                        purchasePrice: value,
-                        salePrice: salePriceTouched ? d.salePrice : suggestSalePrice(value, markup),
-                      }));
-                    }}
-                    placeholder="0"
-                    className="input"
-                    disabled={batchMode}
-                  />
-                  {parsed && draft.purchasePrice === 0 && (
-                    <p className="mt-1 text-[11px] text-amber-600 leading-snug">
-                      Couldn't find this — try "bought at 1.50 £/pp"
-                    </p>
-                  )}
-                </Field>
+                {!hideCostInfo && (
+                  <Field label={`${t('addItemPurchasePriceLabel')} (${currencySymbol}/unit)`}>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={draft.purchasePrice || ''}
+                      onChange={(e) => {
+                        const value = parseFloat(e.target.value) || 0;
+                        setDraft((d) => ({
+                          ...d,
+                          purchasePrice: value,
+                          salePrice: salePriceTouched ? d.salePrice : suggestSalePrice(value, markup),
+                        }));
+                      }}
+                      placeholder="0"
+                      className="input"
+                      disabled={batchMode}
+                    />
+                    {parsed && draft.purchasePrice === 0 && (
+                      <p className="mt-1 text-[11px] text-amber-600 leading-snug">
+                        Couldn't find this — try "bought at 1.50 £/pp"
+                      </p>
+                    )}
+                  </Field>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={t('addItemMarkupLabel')}>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step={0.5}
-                    min={MIN_MARKUP}
-                    max={MAX_MARKUP}
-                    value={markup || ''}
-                    onChange={(e) => handleMarkupChange(parseFloat(e.target.value) || 0)}
-                    placeholder="3"
-                    className="input"
-                  />
-                  <p className="mt-1 text-[11px] text-stone-400 leading-snug">
-                    {t('addItemMarkupHint')} {MIN_MARKUP}×–{MAX_MARKUP}×
-                  </p>
-                </Field>
+              {hideCostInfo && (
+                <p className="text-[11px] text-stone-400 leading-snug flex items-center gap-1">
+                  <Lock size={11} className="shrink-0" />
+                  Purchase price, markup and margin are hidden for your role — you can still set
+                  the sale price below.
+                </p>
+              )}
+
+              <div className={hideCostInfo ? 'grid grid-cols-1 gap-3' : 'grid grid-cols-2 gap-3'}>
+                {!hideCostInfo && (
+                  <Field label={t('addItemMarkupLabel')}>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step={0.5}
+                      min={MIN_MARKUP}
+                      max={MAX_MARKUP}
+                      value={markup || ''}
+                      onChange={(e) => handleMarkupChange(parseFloat(e.target.value) || 0)}
+                      placeholder="3"
+                      className="input"
+                    />
+                    <p className="mt-1 text-[11px] text-stone-400 leading-snug">
+                      {t('addItemMarkupHint')} {MIN_MARKUP}×–{MAX_MARKUP}×
+                    </p>
+                  </Field>
+                )}
                 <Field label={`${t('addItemSuggestedPriceLabel')} (${currencySymbol}/unit)`}>
                   <input
                     type="number"
@@ -960,7 +999,7 @@ export function AddSheet({
                     placeholder="0"
                     className="input"
                   />
-                  {draft.salePrice > 0 && draft.purchasePrice >= 0 && (
+                  {!hideCostInfo && draft.salePrice > 0 && draft.purchasePrice >= 0 && (
                     <p
                       className={`mt-1.5 text-xs font-medium flex items-center gap-1 ${
                         m >= 50
@@ -973,6 +1012,12 @@ export function AddSheet({
                       {m < 30 && <AlertTriangle size={12} />}
                       {m}% margin
                       {m >= 50 ? ' — looks good' : m >= 30 ? ' — a bit thin' : ' — below your usual margin'}
+                    </p>
+                  )}
+                  {vatEnabled && vatRatePct !== undefined && draft.salePrice > 0 && (
+                    <p className="mt-1 text-[11px] text-stone-400">
+                      of which VAT ({vatRatePct}%): {currencySymbol}
+                      {vatPortionOfPrice(draft.salePrice, vatRatePct).toFixed(2)}
                     </p>
                   )}
                   {availableCurrencyCodes.length > 0 && (
@@ -1008,7 +1053,7 @@ export function AddSheet({
                   already shown in Business Health. Deliberately not the
                   same number or the same UI, to avoid conflating the two
                   break-even concepts. */}
-              {draft.salePrice > 0 && draft.purchasePrice > 0 && (
+              {!hideCostInfo && draft.salePrice > 0 && draft.purchasePrice > 0 && (
                 <PriceBreakdownBar
                   purchasePrice={draft.purchasePrice}
                   salePrice={draft.salePrice}
@@ -1020,8 +1065,9 @@ export function AddSheet({
                   explicit suggestion layered from tag presets + the chosen
                   season's boost. Never auto-applied; the seller taps "Use
                   this price" to accept it, same as the foreign-currency and
-                  cost-part calculators above. */}
-              {showMarkupSuggestion && markupSuggestion && (
+                  cost-part calculators above. Hidden for hideCostInfo since
+                  it's markup-derived — same reasoning as the fields above. */}
+              {!hideCostInfo && showMarkupSuggestion && markupSuggestion && (
                 <div className="space-y-1.5">
                   <AiBadge
                     text={`${[
@@ -1055,8 +1101,10 @@ export function AddSheet({
               {batchMode && tiersEnabled && (
                 <div className="rounded-xl bg-cream-100 border border-stone-200 p-3 space-y-2.5 animate-fadeIn">
                   <p className="text-xs text-stone-500 leading-snug">
-                    Same cost per unit ({currencySymbol}{draft.purchasePrice.toFixed(2)}), different sale prices —
-                    each tier saves as its own stock item. E.g. "Small" / 4 / 2.5× and "Large" / 2 / 4×.
+                    {hideCostInfo
+                      ? 'Different sale prices per tier, each tier saves as its own stock item.'
+                      : `Same cost per unit (${currencySymbol}${draft.purchasePrice.toFixed(2)}), different sale prices — each tier saves as its own stock item.`}{' '}
+                    E.g. "Small" / 4 / 2.5× and "Large" / 2 / 4×.
                   </p>
                   {tiers.length > 0 && (
                     <div className="flex gap-2 px-2.5 text-[10px] font-medium text-stone-400 uppercase tracking-wide">
@@ -1161,6 +1209,21 @@ export function AddSheet({
                     className="input"
                   />
                 </Field>
+
+                {shopNames.length > 0 && (
+                  <Field label="Shop">
+                    <select
+                      value={draft.shop ?? ''}
+                      onChange={(e) => setDraft({ ...draft, shop: e.target.value || undefined })}
+                      className="input"
+                    >
+                      <option value="">No shop set</option>
+                      {shopNames.map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
 
                 <Field label="Tags">
                   <div className="flex flex-wrap gap-1.5 mb-1.5">

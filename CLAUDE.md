@@ -11,7 +11,9 @@ Ingen riktig databas, ingen backend — persistens sker via localStorage
 
 **KRITISK REGEL: rör aldrig repot `stem-savvy-seller`.** Det är det riktiga,
 Lovable-kopplade produktionsrepot för Flowertot Botanicals (UK), med en skarp
-Supabase-databas (`bastkukjbwcgdpnvjcpb`). Om en uppgift av misstag pekar mot
+Supabase-databas (`<production-supabase-project-id>` — se privata
+driftsnoteringar för det faktiska id:t, skrivs aldrig ut här i klartext). Om
+en uppgift av misstag pekar mot
 den mappen eller det repot: stanna och fråga innan något committas. Det här
 är inte en teoretisk risk — det har hänt en gång tidigare (mockup-kod
 pushad över produktionsrepot, återställt via `git revert`).

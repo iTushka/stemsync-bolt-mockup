@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Wallet, Store, HelpCircle, Camera, Tag, TrendingUp } from 'lucide-react';
 import { useLanguage } from '../useLanguage';
+import { TuvaraLogoMark } from './TuvaraLogoMark';
 
 interface FirstRunIntroProps {
   open: boolean;
@@ -48,6 +49,14 @@ export function FirstRunIntro({ open, onDismiss }: FirstRunIntroProps) {
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-stone-900/50 animate-fadeIn">
       <div className="w-full sm:max-w-sm bg-cream-50 rounded-t-3xl sm:rounded-3xl shadow-sheet animate-slideUp p-6 pb-7">
+        {/* Brand mark — the app's one "front door" moment (no persistent
+            header exists elsewhere), shown across all steps so it doesn't
+            pop in/out as the user pages through. See TuvaraLogoMark.tsx. */}
+        <div className="flex items-center justify-center gap-2 mb-4">
+          <TuvaraLogoMark size={22} />
+          <span className="text-base font-bold text-stone-800">Tuvara</span>
+        </div>
+
         {/* Step dots */}
         <div className="flex items-center justify-center gap-1.5 mb-5">
           {steps.map((_, i) => (

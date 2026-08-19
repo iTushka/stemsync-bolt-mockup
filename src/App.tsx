@@ -22,6 +22,9 @@ import { CustomerDebtsSheet } from './components/CustomerDebtsSheet';
 import { BusinessHealthSheet } from './components/BusinessHealthSheet';
 import { CustomersSheet } from './components/CustomersSheet';
 import { FirstRunIntro } from './components/FirstRunIntro';
+import { LegalAgreementSheet } from './components/LegalAgreementSheet';
+import { BusinessProfileSheet } from './components/BusinessProfileSheet';
+import { Watermark } from './components/Watermark';
 import {
   emptyFilters,
   defaultSettings,
@@ -40,8 +43,13 @@ import {
   type AdSpendEntry,
   type OwedEntry,
   type FixedCostEntry,
+  type VariableCostEntry,
+  type LegalAcceptance,
+  type BusinessProfile,
 } from './types';
 import { applyFilters, countActiveFilters } from './filterLogic';
+import { TERMS_VERSION } from './legalText';
+import { hasBusinessProfileContent } from './businessProfile';
 
 type Tab = 'stock' | 'sell' | 'offers';
 
@@ -53,6 +61,23 @@ function App() {
   // along with the rest of a demo tenant's data via "Reset to demo data"
   // in Settings, so a fresh sales-demo walkthrough shows it again too.
   const [seenIntro, setSeenIntro] = usePersistentState('seenIntro', false);
+
+  // Terms of Use / Confidentiality acceptance — see legalText.ts and
+  // LegalAgreementSheet.tsx. Persisted per tenant like everything else;
+  // null until someone has actually typed a name and tapped Agree.
+  const [legalAcceptance, setLegalAcceptance] = usePersistentState<LegalAcceptance | null>(
+    'legalAcceptance',
+    null
+  );
+  const [legalOpen, setLegalOpen] = useState(false);
+
+  // "About your business" — see docs/tuvara-ai-berattelse-onboarding-analys.md
+  // and businessProfile.ts. Entirely optional, on-device only, per tenant.
+  const [businessProfile, setBusinessProfile] = usePersistentState<BusinessProfile | null>(
+    'businessProfile',
+    null
+  );
+  const [businessProfileOpen, setBusinessProfileOpen] = useState(false);
 
   const [items, setItems] = usePersistentState<StockItem[]>('items', demoSeed?.items ?? []);
   const [search, setSearch] = useState('');
@@ -71,6 +96,11 @@ function App() {
   const [periods, setPeriods] = usePersistentState<StockPeriod[]>('periods', []);
   const [periodFilter, setPeriodFilter] = useState<string | undefined>(undefined);
 
+  // Shop tag filter — see tuvara-app-personal-moms-butiker-kostnader-insights-analys.md
+  // punkt 3. Same session-only (not persisted), "resets rather than
+  // silently hides stock" pattern as periodFilter above.
+  const [shopFilter, setShopFilter] = useState<string | undefined>(undefined);
+
   const [customers, setCustomers] = usePersistentState<Customer[]>('customers', []);
   const [whatsAppCardOpen, setWhatsAppCardOpen] = useState(false);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
@@ -85,6 +115,19 @@ function App() {
     { id: 'owner', name: 'You', role: 'Owner' },
   ]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Who's currently using the app on this device — see
+  // tuvara-app-personal-moms-butiker-kostnader-insights-analys.md punkt 1
+  // and 5. A trust-based name switch for now (Settings → Team & roles),
+  // not yet PIN-gated — the same "mjuk UI-spärr, inte kryptografisk
+  // säkerhet" reservation used throughout that doc. Defaults to the first
+  // team member (normally the seeded 'owner' entry) so nothing changes
+  // for anyone who never touches this. Falls back gracefully if the
+  // stored id no longer matches any team member (e.g. that person was
+  // removed).
+  const [activeUserId, setActiveUserId] = usePersistentState<string>('activeUserId', 'owner');
+  const activeUser = team.find((u) => u.id === activeUserId) ?? team[0];
+  const isOwner = (activeUser?.role ?? 'Owner') === 'Owner';
 
   const [bundles, setBundles] = usePersistentState<Bundle[]>('bundles', []);
   const [bundleBuilderOpen, setBundleBuilderOpen] = useState(false);
@@ -107,6 +150,7 @@ function App() {
   const [adSpend, setAdSpend] = usePersistentState<AdSpendEntry[]>('adSpend', []);
   const [owed, setOwed] = usePersistentState<OwedEntry[]>('owed', []);
   const [fixedCosts, setFixedCosts] = usePersistentState<FixedCostEntry[]>('fixedCosts', []);
+  const [variableCosts, setVariableCosts] = usePersistentState<VariableCostEntry[]>('variableCosts', []);
   const [businessHealthOpen, setBusinessHealthOpen] = useState(false);
   const [customersSheetOpen, setCustomersSheetOpen] = useState(false);
 
@@ -122,6 +166,8 @@ function App() {
 
   const activeCount = items.filter((i) => !i.soldOut).length;
   const activeFilterCount = countActiveFilters(filters);
+  const termsSigned =
+    legalAcceptance?.termsAcceptedAt !== undefined && legalAcceptance.termsVersion === TERMS_VERSION;
   const cartCount = cart.reduce((sum, l) => sum + l.quantity, 0);
   const cartTotal = cart.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
   const showCheckoutBar = tab === 'sell' && cartCount > 0;
@@ -131,8 +177,9 @@ function App() {
       ? items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()))
       : items;
     const periodMatched = periodFilter ? searched.filter((i) => i.periodId === periodFilter) : searched;
-    return applyFilters(periodMatched, filters);
-  }, [items, search, filters, periodFilter]);
+    const shopMatched = shopFilter ? periodMatched.filter((i) => i.shop === shopFilter) : periodMatched;
+    return applyFilters(shopMatched, filters);
+  }, [items, search, filters, periodFilter, shopFilter]);
 
   const handleSave = (draft: Omit<StockItem, 'id' | 'createdAt'>) => {
     // New stock lands in whichever period is current (periods[0], newest
@@ -290,6 +337,19 @@ function App() {
 
   const handleRemoveFixedCost = (id: string) => {
     setFixedCosts((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const handleAddVariableCost = (entry: Omit<VariableCostEntry, 'id' | 'loggedAt'>) => {
+    const newEntry: VariableCostEntry = {
+      ...entry,
+      id: Math.random().toString(36).slice(2, 9),
+      loggedAt: Date.now(),
+    };
+    setVariableCosts((prev) => [newEntry, ...prev]);
+  };
+
+  const handleRemoveVariableCost = (id: string) => {
+    setVariableCosts((prev) => prev.filter((c) => c.id !== id));
   };
 
   const handleSaveBundle = (bundle: Omit<Bundle, 'id' | 'createdAt'>) => {
@@ -506,11 +566,19 @@ function App() {
             onOpenBusinessHealth={() => setBusinessHealthOpen(true)}
             onOpenCustomers={() => setCustomersSheetOpen(true)}
             onOpenAging={(item) => setAgingItem(item)}
+            termsSigned={termsSigned}
+            onOpenLegal={() => setLegalOpen(true)}
+            hasBusinessProfile={hasBusinessProfileContent(businessProfile)}
+            onOpenBusinessProfile={() => setBusinessProfileOpen(true)}
             currencySymbol={settings.currencySymbol}
             exchangeRates={settings.exchangeRates ?? {}}
             periods={periods}
             periodFilter={periodFilter}
             onPeriodFilterChange={setPeriodFilter}
+            shops={settings.shopNames ?? []}
+            shopFilter={shopFilter}
+            onShopFilterChange={setShopFilter}
+            hideCostInfo={!isOwner}
           />
         )}
         {tab === 'sell' && (
@@ -574,6 +642,10 @@ function App() {
         sales={sales}
         markupPresets={settings.markupPresets}
         seasonPresets={settings.seasonPresets}
+        vatEnabled={settings.vatEnabled}
+        vatRatePct={settings.vatRatePct}
+        shopNames={settings.shopNames}
+        hideCostInfo={!isOwner}
       />
       <WhatsAppCardSheet open={whatsAppCardOpen} onClose={() => setWhatsAppCardOpen(false)} />
       <AddCustomerSheet
@@ -588,9 +660,15 @@ function App() {
         onChange={setSettings}
         team={team}
         onTeamChange={setTeam}
+        activeUserId={activeUserId}
+        onActiveUserChange={setActiveUserId}
         items={items}
         periods={periods}
         onStartPeriod={handleStartPeriod}
+        legalAcceptance={legalAcceptance}
+        onOpenLegal={() => setLegalOpen(true)}
+        businessProfile={businessProfile}
+        onOpenBusinessProfile={() => setBusinessProfileOpen(true)}
       />
       <BundleBuilder
         open={bundleBuilderOpen || editingBundle !== null}
@@ -624,6 +702,9 @@ function App() {
         website={settings.website}
         socialLinks={settings.socialLinks}
         printFormat={settings.printFormat}
+        vatEnabled={settings.vatEnabled}
+        vatRatePct={settings.vatRatePct}
+        hideCostInfo={!isOwner}
         channelOptions={cartChannelOptions}
         items={items}
         bundles={bundles}
@@ -669,12 +750,18 @@ function App() {
         adSpend={adSpend}
         owed={owed}
         fixedCosts={fixedCosts}
+        variableCosts={variableCosts}
         currencySymbol={settings.currencySymbol}
         onLogAdSpend={handleLogAdSpend}
         onAddOwed={handleAddOwed}
         onSettleOwed={handleSettleOwed}
         onAddFixedCost={handleAddFixedCost}
         onRemoveFixedCost={handleRemoveFixedCost}
+        onAddVariableCost={handleAddVariableCost}
+        onRemoveVariableCost={handleRemoveVariableCost}
+        isOwner={isOwner}
+        vatEnabled={settings.vatEnabled}
+        vatRatePct={settings.vatRatePct}
       />
       <CustomersSheet
         open={customersSheetOpen}
@@ -682,6 +769,19 @@ function App() {
         customers={customers}
         sales={sales}
       />
+      <LegalAgreementSheet
+        open={legalOpen}
+        onClose={() => setLegalOpen(false)}
+        acceptance={legalAcceptance}
+        onAccept={setLegalAcceptance}
+      />
+      <BusinessProfileSheet
+        open={businessProfileOpen}
+        onClose={() => setBusinessProfileOpen(false)}
+        profile={businessProfile}
+        onSave={setBusinessProfile}
+      />
+      <Watermark label={`${PILOT_SLUG} · ${new Date().toLocaleDateString()}`} />
     </div>
   );
 }

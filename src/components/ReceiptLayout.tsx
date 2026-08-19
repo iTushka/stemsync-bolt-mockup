@@ -12,6 +12,10 @@ interface ReceiptLayoutProps {
   subtotal: number;
   discountAmount: number;
   total: number;
+  /** Moms/VAT — see vat.ts. Only shown when > 0 (i.e. Settings' "Include
+   *  VAT in prices" toggle is on and a rate is set). */
+  vatAmount?: number;
+  vatRatePct?: number;
   currencySymbol: string;
   contactInfo: string;
   website?: string;
@@ -56,6 +60,8 @@ export const ReceiptLayout = forwardRef<HTMLDivElement, ReceiptLayoutProps>(func
     subtotal,
     discountAmount,
     total,
+    vatAmount,
+    vatRatePct,
     currencySymbol,
     contactInfo,
     website,
@@ -152,6 +158,14 @@ export const ReceiptLayout = forwardRef<HTMLDivElement, ReceiptLayoutProps>(func
               {total.toFixed(2)} {currencySymbol}
             </span>
           </div>
+          {vatAmount !== undefined && vatAmount > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#a8a29e' }}>
+              <span>of which VAT ({vatRatePct}%)</span>
+              <span>
+                {vatAmount.toFixed(2)} {currencySymbol}
+              </span>
+            </div>
+          )}
         </div>
 
         {(contactInfo || website || socialLinks.length > 0) && (

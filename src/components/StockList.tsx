@@ -9,6 +9,8 @@ import { InsightBar } from './InsightBar';
 import { stockInsights } from '../insights';
 import { EarningsStrip } from './EarningsStrip';
 import { ShareAccountHint } from './ShareAccountHint';
+import { LegalAcceptanceHint } from './LegalAcceptanceHint';
+import { BusinessProfileHint } from './BusinessProfileHint';
 import { DemoCurrencySwitcher } from './DemoCurrencySwitcher';
 import { isDemoPilot, PILOT_SLUG } from '../config';
 import { fromLocal, CURRENCY_SYMBOLS, type CurrencyCode, type ExchangeRates } from '../exchangeRates';
@@ -43,6 +45,16 @@ interface StockListProps {
   onOpenBusinessHealth: () => void;
   onOpenCustomers: () => void;
   onOpenAging: (item: StockItem) => void;
+  /** Terms of Use acceptance status + opener — see LegalAcceptanceHint.tsx
+   *  and legalText.ts. Surfaced here (same "hint on the tab everyone lands
+   *  on" pattern as ShareAccountHint) rather than only in Settings. */
+  termsSigned: boolean;
+  onOpenLegal: () => void;
+  /** "About your business" profile status + opener — see
+   *  BusinessProfileHint.tsx and businessProfile.ts. Same "hint on the tab
+   *  everyone lands on" pattern as ShareAccountHint/LegalAcceptanceHint. */
+  hasBusinessProfile: boolean;
+  onOpenBusinessProfile: () => void;
   currencySymbol: string;
   exchangeRates: ExchangeRates;
   /** Optional period filter chips — see tuvara-perioder-analys.md. Only
@@ -52,6 +64,18 @@ interface StockListProps {
   periods: StockPeriod[];
   periodFilter?: string;
   onPeriodFilterChange: (id: string | undefined) => void;
+  /** Optional shop filter chips — see
+   *  tuvara-app-personal-moms-butiker-kostnader-insights-analys.md punkt 3.
+   *  Same "invisible until named" pattern as periods above: only rendered
+   *  once `shops` (Settings' shopNames) is non-empty. */
+  shops: string[];
+  shopFilter?: string;
+  onShopFilterChange: (name: string | undefined) => void;
+  /** Staff-rättigheter (punkt 1,
+   *  tuvara-app-personal-moms-butiker-kostnader-insights-analys.md) —
+   *  when true, hides margin/cost info on every card, showing only sale
+   *  price. Same soft UI gate as AddSheet's hideCostInfo. */
+  hideCostInfo?: boolean;
 }
 
 const AGING_ACTION_LABEL: Record<NonNullable<StockItem['agingAction']>, string> = {
@@ -119,11 +143,19 @@ export function StockList({
   onOpenBusinessHealth,
   onOpenCustomers,
   onOpenAging,
+  termsSigned,
+  onOpenLegal,
+  hasBusinessProfile,
+  onOpenBusinessProfile,
   currencySymbol,
   exchangeRates,
   periods,
   periodFilter,
   onPeriodFilterChange,
+  shops,
+  shopFilter,
+  onShopFilterChange,
+  hideCostInfo = false,
 }: StockListProps) {
   const [displayCurrency, setDisplayCurrency] = useState<CurrencyCode | 'native'>('native');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -201,6 +233,8 @@ export function StockList({
       />
 
       <ShareAccountHint teamSize={team.length} onOpenSettings={onOpenSettings} />
+      <LegalAcceptanceHint termsSigned={termsSigned} onOpenLegal={onOpenLegal} />
+      <BusinessProfileHint hasContent={hasBusinessProfile} onOpenProfile={onOpenBusinessProfile} />
 
       {/* Row 2: Search + Filter */}
       <div className="sticky top-[52px] z-10 bg-cream-50/95 backdrop-blur-md px-4 pb-3">
@@ -262,6 +296,37 @@ export function StockList({
         </div>
       )}
 
+      {/* Optional shop filter — see the shops prop comment above. Same
+          "absent until named" pattern as periods: a seller who hasn't set
+          up any shop names in Settings never sees this row. */}
+      {shops.length > 0 && (
+        <div className="px-4 pb-3 -mt-1 flex gap-2 overflow-x-auto no-scrollbar">
+          <button
+            onClick={() => onShopFilterChange(undefined)}
+            className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition active:scale-95 ${
+              shopFilter === undefined
+                ? 'bg-accent-500 text-white border border-accent-500'
+                : 'bg-white text-stone-600 border border-stone-200 hover:border-stone-300'
+            }`}
+          >
+            All shops
+          </button>
+          {shops.map((name) => (
+            <button
+              key={name}
+              onClick={() => onShopFilterChange(shopFilter === name ? undefined : name)}
+              className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-medium transition active:scale-95 ${
+                shopFilter === name
+                  ? 'bg-accent-500 text-white border border-accent-500'
+                  : 'bg-white text-stone-600 border border-stone-200 hover:border-stone-300'
+              }`}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Grid of cards */}
       <div className="px-4 pt-1">
         {items.length === 0 ? (
@@ -280,6 +345,7 @@ export function StockList({
                   displaySalePrice={convertPrice(entry.item.salePrice)}
                   onOpenAging={onOpenAging}
                   onEdit={onEditItem}
+                  hideCostInfo={hideCostInfo}
                 />
               ) : (
                 <VariantClusterCard
@@ -317,12 +383,14 @@ function StockCard({
   displaySalePrice,
   onOpenAging,
   onEdit,
+  hideCostInfo = false,
 }: {
   item: StockItem;
   currencySymbol: string;
   displaySalePrice: number;
   onOpenAging: (item: StockItem) => void;
   onEdit: (item: StockItem) => void;
+  hideCostInfo?: boolean;
 }) {
   const m = margin(item.purchasePrice, item.salePrice);
   return (
@@ -393,7 +461,7 @@ function StockCard({
             <div className="text-sm font-semibold text-stone-900">
               {displaySalePrice.toFixed(displaySalePrice % 1 === 0 ? 0 : 2)} {currencySymbol}
             </div>
-            <div className="text-[10px] text-stone-400">{m}% margin</div>
+            {!hideCostInfo && <div className="text-[10px] text-stone-400">{m}% margin</div>}
           </div>
         </div>
       </div>

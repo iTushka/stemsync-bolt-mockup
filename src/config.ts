@@ -161,3 +161,14 @@ export const DEFAULT_CURRENCY = TENANT_CONFIGS[PILOT_SLUG].currency;
  *  Shoilee both on 'general') never collide even if tested in the same
  *  browser. */
 export const STORAGE_PREFIX = `stemsync-${PILOT_SLUG}`;
+
+/** Pilot-phase UX caps —
+ *  tuvara-app-personal-moms-butiker-kostnader-insights-analys.md fråga 4:
+ *  handling multiple shops and multiple staff logins is planned to become
+ *  a paid tier later, but during the pilot everyone gets these fixed
+ *  limits regardless of plan. Named constants (not inlined numbers) so
+ *  swapping this for a real per-tenant plan limit later is a one-line
+ *  change here, not a hunt through the codebase — same reasoning as
+ *  `simulateFreePlan` already hinting a plan model is coming. */
+export const MAX_SHOPS = 3;
+export const MAX_STAFF = 5;

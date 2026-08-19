@@ -6,6 +6,7 @@ import { margin } from '../types';
 import { ReceiptLayout } from './ReceiptLayout';
 import { applyPrintFormat } from '../printFormats';
 import { shareReceiptImage } from '../receiptImage';
+import { vatPortionOfPrice } from '../vat';
 
 interface QuoteCardProps {
   open: boolean;
@@ -21,6 +22,17 @@ interface QuoteCardProps {
   website?: string;
   socialLinks?: SocialLink[];
   printFormat?: PrintFormat;
+  /** Moms/VAT display — see vat.ts and Settings' "Include VAT in prices"
+   *  toggle. When vatEnabled is off, or vatRatePct isn't set, no VAT line
+   *  is shown anywhere on this card — same undefined-safe default as the
+   *  rest of AppSettings. */
+  vatEnabled?: boolean;
+  vatRatePct?: number;
+  /** Staff-rättigheter (punkt 1,
+   *  tuvara-app-personal-moms-butiker-kostnader-insights-analys.md) —
+   *  hides the margin-after-discount warning below, which otherwise
+   *  reveals cost basis/margin to whoever is running checkout. */
+  hideCostInfo?: boolean;
   /** Channels the items in this cart are already listed on — offered as
    *  quick picks so recording where a sale came from costs one tap, not
    *  typing. Optional: leaving it unset is a valid, tracked choice. */
@@ -89,6 +101,9 @@ export function QuoteCard({
   website,
   socialLinks,
   printFormat,
+  vatEnabled,
+  vatRatePct,
+  hideCostInfo = false,
   channelOptions,
   items,
   bundles,
@@ -135,6 +150,8 @@ export function QuoteCard({
       ? Math.min(subtotal, Math.max(0, ((parseFloat(discount) || 0) / 100) * subtotal))
       : Math.min(subtotal, Math.max(0, parseFloat(discount) || 0));
   const total = subtotal - discountAmount;
+  const vatAmount =
+    vatEnabled && vatRatePct ? vatPortionOfPrice(total, vatRatePct) : 0;
 
   // Margin warning — reuses the exact same threshold/colour logic as the
   // "Add item" card (AddSheet.tsx, via the shared `margin()` helper) rather
@@ -177,6 +194,7 @@ export function QuoteCard({
     '',
     discountAmount > 0 ? `Discount: -${discountAmount} ${currencySymbol}` : null,
     `Total: ${total} ${currencySymbol}`,
+    vatAmount > 0 ? `(of which VAT: ${vatAmount.toFixed(2)} ${currencySymbol})` : null,
     contactInfo ? `\nContact: ${contactInfo}` : null,
     website ? `Website: ${website}` : null,
     ...(socialLinks ?? []).map((s) => `${s.label || 'Link'}: ${s.url}`),
@@ -255,6 +273,8 @@ export function QuoteCard({
           subtotal={subtotal}
           discountAmount={discountAmount}
           total={total}
+          vatAmount={vatAmount}
+          vatRatePct={vatRatePct}
           currencySymbol={currencySymbol}
           contactInfo={contactInfo}
           website={website}
@@ -384,10 +404,16 @@ export function QuoteCard({
               <span>Total</span>
               <span>{total.toFixed(2)} {currencySymbol}</span>
             </div>
+            {vatAmount > 0 && (
+              <div className="flex items-center justify-between text-xs text-stone-400">
+                <span>of which VAT ({vatRatePct}%)</span>
+                <span>{vatAmount.toFixed(2)} {currencySymbol}</span>
+              </div>
+            )}
             {/* Margin warning — owner-facing only, see the costBasis/
                 overallMargin comment above. Only surfaces once a discount
-                is actually applied. */}
-            {discountAmount > 0 && overallMargin !== null && (
+                is actually applied, and never for hideCostInfo (Staff). */}
+            {!hideCostInfo && discountAmount > 0 && overallMargin !== null && (
               <p
                 className={`!mt-2 text-xs font-medium flex items-center gap-1 ${
                   overallMargin >= 50

@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, TrendingUp, Megaphone, Wallet, Scale, Plus, Trash2, Check, Sparkles, CalendarClock, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { ArrowLeft, TrendingUp, Megaphone, Wallet, Scale, Plus, Trash2, Check, Sparkles, CalendarClock, ArrowDownCircle, ArrowUpCircle, PiggyBank, Repeat, BarChart3, Download, Lock } from 'lucide-react';
 import { Sheet } from './Sheet';
 import { AiBadge } from './AiBadge';
-import type { AdSpendEntry, Customer, FixedCostEntry, OwedEntry, Sale, StockItem } from '../types';
+import type { AdSpendEntry, Customer, FixedCostEntry, OwedEntry, Sale, StockItem, VariableCostEntry } from '../types';
 import { computeEarnings } from '../earnings';
 import {
   computeROI,
@@ -11,9 +11,13 @@ import {
   computeChannelRoas,
   computeWorkingCapitalLite,
   computeClassicBreakEven,
+  computeActualProfit,
+  computeInsightsSummary,
+  type InsightsPeriod,
 } from '../businessHealth';
-import { FIXED_COST_SUGGESTIONS_BY_TENANT } from '../categoryFieldMap';
-import { TENANT } from '../config';
+import { FIXED_COST_SUGGESTIONS_BY_TENANT, VARIABLE_COST_SUGGESTIONS_BY_TENANT } from '../categoryFieldMap';
+import { TENANT, PILOT_SLUG } from '../config';
+import { exportStockCsv, exportSalesCsv } from '../insightsExport';
 
 const WINDOW_DAYS = 7;
 
@@ -36,15 +40,33 @@ interface BusinessHealthSheetProps {
   adSpend: AdSpendEntry[];
   owed: OwedEntry[];
   fixedCosts: FixedCostEntry[];
+  variableCosts: VariableCostEntry[];
   currencySymbol: string;
   onLogAdSpend: (entry: Omit<AdSpendEntry, 'id' | 'loggedAt'>) => void;
   onAddOwed: (entry: Omit<OwedEntry, 'id' | 'createdAt' | 'settledAt'>) => void;
   onSettleOwed: (id: string) => void;
   onAddFixedCost: (entry: Omit<FixedCostEntry, 'id' | 'createdAt'>) => void;
   onRemoveFixedCost: (id: string) => void;
+  onAddVariableCost: (entry: Omit<VariableCostEntry, 'id' | 'loggedAt'>) => void;
+  onRemoveVariableCost: (id: string) => void;
+  /** Insights (punkt 5) is Owner-only — see App.tsx's activeUser/isOwner
+   *  and SettingsSheet's Team & roles switcher. A soft UI gate, not
+   *  cryptographic security, same reservation as the rest of this doc's
+   *  punkt 1. */
+  isOwner: boolean;
+  vatEnabled?: boolean;
+  vatRatePct?: number;
 }
 
-type View = 'overview' | 'logAdSpend' | 'owedList' | 'addOwed' | 'fixedCosts' | 'upcoming';
+type View =
+  | 'overview'
+  | 'logAdSpend'
+  | 'owedList'
+  | 'addOwed'
+  | 'fixedCosts'
+  | 'variableCosts'
+  | 'upcoming'
+  | 'insights';
 
 interface UpcomingEntry {
   id: string;
@@ -94,14 +116,21 @@ export function BusinessHealthSheet({
   adSpend,
   owed,
   fixedCosts,
+  variableCosts,
   currencySymbol,
   onLogAdSpend,
   onAddOwed,
   onSettleOwed,
   onAddFixedCost,
   onRemoveFixedCost,
+  onAddVariableCost,
+  onRemoveVariableCost,
+  isOwner,
+  vatEnabled,
+  vatRatePct,
 }: BusinessHealthSheetProps) {
   const [view, setView] = useState<View>('overview');
+  const [insightsPeriod, setInsightsPeriod] = useState<InsightsPeriod>('week');
 
   const roi = useMemo(() => computeROI(sales, items, WINDOW_DAYS), [sales, items]);
   const runRate = useMemo(() => computeRunRate(sales, items, WINDOW_DAYS), [sales, items]);
@@ -110,6 +139,14 @@ export function BusinessHealthSheet({
   const workingCapital = useMemo(() => computeWorkingCapitalLite(items, customers, owed), [items, customers, owed]);
   const classicBreakEven = useMemo(() => computeClassicBreakEven(fixedCosts, items), [fixedCosts, items]);
   const stockBreakEven = useMemo(() => computeEarnings(sales, items, WINDOW_DAYS).breakEvenUnits, [sales, items]);
+  const actualProfit = useMemo(
+    () => computeActualProfit(sales, items, fixedCosts, variableCosts, WINDOW_DAYS),
+    [sales, items, fixedCosts, variableCosts]
+  );
+  const insightsSummary = useMemo(
+    () => computeInsightsSummary(sales, items, fixedCosts, variableCosts, insightsPeriod),
+    [sales, items, fixedCosts, variableCosts, insightsPeriod]
+  );
 
   const unpaidOwed = owed.filter((o) => !o.settledAt);
   const upcoming = useMemo(() => buildUpcomingEntries(customers, owed), [customers, owed]);
@@ -136,7 +173,9 @@ export function BusinessHealthSheet({
           {view === 'logAdSpend' && 'Log a boosted post'}
           {(view === 'owedList' || view === 'addOwed') && 'What you owe'}
           {view === 'fixedCosts' && 'Fixed costs'}
+          {view === 'variableCosts' && 'One-off costs'}
           {view === 'upcoming' && 'Upcoming'}
+          {view === 'insights' && 'Insights'}
         </h2>
       </div>
 
@@ -164,6 +203,44 @@ export function BusinessHealthSheet({
               hint="How much of each sale is profit, on average."
             />
           </Section>
+
+          {/* Din faktiska vinst — revenue minus cost of goods minus fixed
+              minus variable costs, all in one place, in plain language. */}
+          <Section icon={PiggyBank} title="Your actual profit">
+            <StatRow
+              label={`Last ${WINDOW_DAYS} days, after everything`}
+              value={`${actualProfit.actualProfit >= 0 ? '' : '-'}${currencySymbol}${Math.abs(actualProfit.actualProfit).toFixed(0)}`}
+              hint={`${currencySymbol}${actualProfit.revenue.toFixed(0)} in sales − ${currencySymbol}${actualProfit.costOfGoods.toFixed(0)} cost of stock − ${currencySymbol}${actualProfit.fixedCosts.toFixed(0)} fixed costs − ${currencySymbol}${actualProfit.variableCosts.toFixed(0)} one-off costs. Not bookkeeping — just what's actually left.`}
+            />
+            <button
+              onClick={() => setView('variableCosts')}
+              className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-accent-600 hover:text-accent-700"
+            >
+              <Plus size={16} /> {variableCosts.length > 0 ? 'Manage one-off costs' : 'Log a one-off cost'}
+            </button>
+          </Section>
+
+          {/* Insights — Owner-only, see the isOwner prop comment above. */}
+          {isOwner ? (
+            <Section icon={BarChart3} title="Insights">
+              <p className="text-xs text-stone-400 leading-snug">
+                Sales and costs by day, week, month or year — with CSV export.
+              </p>
+              <button
+                onClick={() => setView('insights')}
+                className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-accent-600 hover:text-accent-700"
+              >
+                <BarChart3 size={16} /> Open Insights
+              </button>
+            </Section>
+          ) : (
+            <Section icon={Lock} title="Insights">
+              <p className="text-xs text-stone-400 leading-snug">
+                Only visible to the Owner role — switch who's using this device in Settings →
+                Team & roles to see it.
+              </p>
+            </Section>
+          )}
 
           {/* Upcoming — combined বাকি (in) + owed (out) with a date set */}
           <Section icon={CalendarClock} title="Upcoming">
@@ -314,7 +391,29 @@ export function BusinessHealthSheet({
         />
       )}
 
+      {view === 'variableCosts' && (
+        <VariableCostsView
+          variableCosts={variableCosts}
+          currencySymbol={currencySymbol}
+          onAdd={onAddVariableCost}
+          onRemove={onRemoveVariableCost}
+        />
+      )}
+
       {view === 'upcoming' && <UpcomingView entries={upcoming} currencySymbol={currencySymbol} />}
+
+      {view === 'insights' && isOwner && (
+        <InsightsView
+          summary={insightsSummary}
+          period={insightsPeriod}
+          onPeriodChange={setInsightsPeriod}
+          currencySymbol={currencySymbol}
+          onExportStock={() => exportStockCsv(items, PILOT_SLUG)}
+          onExportSales={() =>
+            exportSalesCsv(sales, insightsSummary, fixedCosts, variableCosts, !!vatEnabled, vatRatePct, PILOT_SLUG)
+          }
+        />
+      )}
     </Sheet>
   );
 }
@@ -736,6 +835,255 @@ function FixedCostsView({
           className="w-full h-11 rounded-full bg-accent-500 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.98] transition"
         >
           Add fixed cost
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Registers a one-off VariableCostEntry — shipping for an order, a
+ *  one-time packaging buy, a repair. Same "no guessed amount" discipline
+ *  as FixedCostsView, plus two low-friction shortcuts requested in
+ *  tuvara-app-personal-moms-butiker-kostnader-insights-analys.md punkt 4:
+ *  a label autocomplete built from what's already been logged (native
+ *  <datalist>, same pattern LogAdSpendView already uses for channels),
+ *  and a one-tap "Log again" for the most recent entry. Neither shortcut
+ *  ever fills in an amount automatically — only the label, and only when
+ *  the seller picks it. */
+function VariableCostsView({
+  variableCosts,
+  currencySymbol,
+  onAdd,
+  onRemove,
+}: {
+  variableCosts: VariableCostEntry[];
+  currencySymbol: string;
+  onAdd: (entry: Omit<VariableCostEntry, 'id' | 'loggedAt'>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [label, setLabel] = useState('');
+  const [amount, setAmount] = useState('');
+
+  const suggestions = VARIABLE_COST_SUGGESTIONS_BY_TENANT[TENANT];
+  const previousLabels = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const c of variableCosts) {
+      if (!seen.has(c.label)) {
+        seen.add(c.label);
+        out.push(c.label);
+      }
+    }
+    return out;
+  }, [variableCosts]);
+  const mostRecent = variableCosts[0];
+
+  const value = parseFloat(amount);
+  const canAdd = label.trim().length > 0 && !isNaN(value) && value > 0;
+
+  const handleAdd = () => {
+    if (!canAdd) return;
+    onAdd({ label: label.trim(), amount: Math.round(value * 100) / 100 });
+    setLabel('');
+    setAmount('');
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto px-5 pb-6 no-scrollbar space-y-4">
+      {mostRecent && (
+        <button
+          onClick={() => onAdd({ label: mostRecent.label, amount: mostRecent.amount })}
+          className="w-full flex items-center justify-between rounded-xl border border-dashed border-stone-300 bg-white px-3.5 py-3 text-left hover:border-accent-400 transition"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Repeat size={15} className="text-accent-500 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-stone-800">Log again</div>
+              <div className="text-xs text-stone-400 truncate">
+                {mostRecent.label} · {mostRecent.amount} {currencySymbol}
+              </div>
+            </div>
+          </div>
+        </button>
+      )}
+
+      {variableCosts.length > 0 && (
+        <div className="space-y-1.5">
+          {variableCosts.map((c) => (
+            <div
+              key={c.id}
+              className="flex items-center justify-between rounded-xl border border-stone-200 bg-white px-3.5 py-3"
+            >
+              <div>
+                <div className="text-sm font-semibold text-stone-800">{c.label}</div>
+                <div className="text-xs text-stone-400">{new Date(c.loggedAt).toLocaleDateString()}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-stone-900">
+                  {c.amount} {currencySymbol}
+                </span>
+                <button
+                  onClick={() => onRemove(c.id)}
+                  aria-label="Remove one-off cost"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:bg-stone-100 hover:text-red-500 transition"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-stone-200 bg-white p-4 space-y-3">
+        <AiBadge text="Common one-off costs for businesses like yours — tap one to start, you fill in your own amount. Tuvara never guesses what you spent." />
+        <div className="flex flex-wrap gap-1.5">
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              onClick={() => setLabel(s)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition active:scale-95 ${
+                label === s ? 'bg-accent-500 text-white' : 'bg-cream-100 text-stone-600 hover:bg-cream-200'
+              }`}
+            >
+              <Sparkles size={10} className="inline mr-1 -mt-0.5" />
+              {s}
+            </button>
+          ))}
+        </div>
+        <label className="block">
+          <span className="block text-xs font-medium text-stone-500 mb-1">Cost</span>
+          <input
+            list="business-health-variable-costs"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="e.g. Shipping for the DHL order"
+            className="input"
+          />
+          <datalist id="business-health-variable-costs">
+            {previousLabels.map((l) => (
+              <option key={l} value={l} />
+            ))}
+          </datalist>
+        </label>
+        <label className="block">
+          <span className="block text-xs font-medium text-stone-500 mb-1">Amount ({currencySymbol})</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0"
+            className="input"
+          />
+        </label>
+        <button
+          onClick={handleAdd}
+          disabled={!canAdd}
+          className="w-full h-11 rounded-full bg-accent-500 text-white font-semibold text-sm disabled:opacity-40 active:scale-[0.98] transition"
+        >
+          Add one-off cost
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const INSIGHTS_PERIODS: { value: InsightsPeriod; label: string }[] = [
+  { value: 'day', label: 'Today' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+  { value: 'year', label: 'Year' },
+];
+
+/** Owner-only period-grouped Insights — see the isOwner prop comment on
+ *  BusinessHealthSheetProps and businessHealth.ts's computeInsightsSummary.
+ *  Modelled on Flowertot Florist's Friend's InsightsTab: a period picker,
+ *  a revenue/cost/profit summary, top sellers, and CSV export (two files,
+ *  matching Flowertot's StockDataTools pattern but with Tuvara's own
+ *  columns — see insightsExport.ts). */
+function InsightsView({
+  summary,
+  period,
+  onPeriodChange,
+  currencySymbol,
+  onExportStock,
+  onExportSales,
+}: {
+  summary: ReturnType<typeof computeInsightsSummary>;
+  period: InsightsPeriod;
+  onPeriodChange: (p: InsightsPeriod) => void;
+  currencySymbol: string;
+  onExportStock: () => void;
+  onExportSales: () => void;
+}) {
+  return (
+    <div className="flex-1 overflow-y-auto px-5 pb-6 no-scrollbar space-y-4">
+      <div className="flex gap-1.5">
+        {INSIGHTS_PERIODS.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => onPeriodChange(p.value)}
+            className={`flex-1 h-9 rounded-full text-xs font-semibold transition ${
+              period === p.value
+                ? 'bg-accent-500 text-white'
+                : 'bg-cream-100 text-stone-600 hover:bg-cream-200'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="rounded-2xl border border-stone-200 bg-white p-4 space-y-2.5">
+        <StatRow label="Revenue" value={`${summary.revenue.toFixed(0)} ${currencySymbol}`} />
+        <StatRow label="Cost of goods" value={`${summary.costOfGoods.toFixed(0)} ${currencySymbol}`} />
+        <StatRow label="Fixed costs" value={`${summary.fixedCosts.toFixed(0)} ${currencySymbol}`} />
+        <StatRow label="One-off costs" value={`${summary.variableCosts.toFixed(0)} ${currencySymbol}`} />
+        <div className="border-t border-stone-100 pt-2">
+          <StatRow
+            label="Actual profit"
+            value={`${summary.profit >= 0 ? '' : '-'}${currencySymbol}${Math.abs(summary.profit).toFixed(0)}`}
+          />
+        </div>
+        <p className="text-[11px] text-stone-400">{summary.saleCount} sale(s) in this period.</p>
+      </div>
+
+      <div className="rounded-2xl border border-stone-200 bg-white p-4">
+        <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-2.5">
+          Top sellers
+        </h3>
+        {summary.topSellers.length === 0 ? (
+          <EmptyHint text="No sales logged in this period yet." />
+        ) : (
+          <div className="space-y-2">
+            {summary.topSellers.map((s) => (
+              <div key={s.itemId} className="flex items-center justify-between text-sm">
+                <span className="text-stone-700 truncate">{s.name}</span>
+                <span className="text-stone-500 shrink-0 ml-2">
+                  {s.quantity} sold · {s.revenue.toFixed(0)} {currencySymbol}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-stone-200 bg-white p-4 space-y-2">
+        <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wide mb-1">
+          Export CSV
+        </h3>
+        <button
+          onClick={onExportStock}
+          className="w-full h-10 rounded-xl border border-stone-200 text-sm font-medium text-stone-700 flex items-center justify-center gap-1.5 hover:border-accent-300 transition"
+        >
+          <Download size={15} /> Stock CSV
+        </button>
+        <button
+          onClick={onExportSales}
+          className="w-full h-10 rounded-xl border border-stone-200 text-sm font-medium text-stone-700 flex items-center justify-center gap-1.5 hover:border-accent-300 transition"
+        >
+          <Download size={15} /> Sales CSV (this period)
         </button>
       </div>
     </div>
