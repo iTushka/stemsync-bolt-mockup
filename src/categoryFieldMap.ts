@@ -1,5 +1,5 @@
 import type { Category, SeasonPreset } from './types';
-import type { TenantId } from './config';
+import type { TenantId, PilotSlug } from './config';
 
 /**
  * Which categories a tenant sees, and how the shared StockItem fields
@@ -108,7 +108,7 @@ export const VARIABLE_COST_SUGGESTIONS_BY_TENANT: Record<TenantId, string[]> = {
   general: ['Shipping for an order', 'One-off supply buy', 'Repair / replacement'],
 };
 
-interface CategoryFieldConfig {
+export interface CategoryFieldConfig {
   /** Label for the shared "environment" free-text field. */
   environmentLabel: string;
   environmentPlaceholder: string;
@@ -192,6 +192,48 @@ const CONFIG_BY_CATEGORY: Partial<Record<Category, CategoryFieldConfig>> = {
 
 export function categoryFieldConfig(category: Category): CategoryFieldConfig {
   return CONFIG_BY_CATEGORY[category] ?? DEFAULT_CONFIG;
+}
+
+/**
+ * Demo tenants (demo-fashion/demo-craft/demo-food) get their own,
+ * independently admin-editable category lists from the tuvara-demo Supabase
+ * project instead of piggybacking on their underlying TenantId's static
+ * list above — see fetchDemoBaseline.ts, which calls setDemoCategoryOverride
+ * once the cloud fetch resolves. Everything below is additive: real pilots
+ * (flowertot/jhums/moja/shoilee) never set an override and keep using
+ * CATEGORIES_BY_TENANT/categoryFieldConfig/CATEGORY_KEYWORDS_BY_TENANT
+ * exactly as before. Demo tenants fall back to those same static, tenant-
+ * mirrored lists too, until (or unless) the cloud fetch succeeds — see
+ * usePersistentState/App.tsx for the loading sequence.
+ */
+export interface DemoCategoryOverride {
+  categories: Category[];
+  categoryConfig: Partial<Record<Category, CategoryFieldConfig>>;
+  categoryKeywords: Partial<Record<Category, string[]>>;
+}
+
+const demoCategoryOverrides: Partial<Record<PilotSlug, DemoCategoryOverride>> = {};
+
+export function setDemoCategoryOverride(slug: PilotSlug, override: DemoCategoryOverride): void {
+  demoCategoryOverrides[slug] = override;
+}
+
+export function categoriesForPilot(slug: PilotSlug, tenant: TenantId): Category[] {
+  return demoCategoryOverrides[slug]?.categories ?? CATEGORIES_BY_TENANT[tenant];
+}
+
+export function categoryFieldConfigForPilot(
+  slug: PilotSlug,
+  category: Category
+): CategoryFieldConfig {
+  return demoCategoryOverrides[slug]?.categoryConfig[category] ?? categoryFieldConfig(category);
+}
+
+export function categoryKeywordsForPilot(
+  slug: PilotSlug,
+  tenant: TenantId
+): Partial<Record<Category, string[]>> {
+  return demoCategoryOverrides[slug]?.categoryKeywords ?? CATEGORY_KEYWORDS_BY_TENANT[tenant];
 }
 
 /**

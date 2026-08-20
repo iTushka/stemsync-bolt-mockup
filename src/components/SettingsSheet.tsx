@@ -1041,6 +1041,13 @@ export function SettingsSheet({
         </div>
 
         <div className="pt-2 border-t border-stone-100">
+          {/* Demo pilots never write to localStorage in the first place (see
+              usePersistentState.ts) — clearTenantStorage() is a no-op for
+              them, and the reload is what actually "resets" by re-fetching
+              the current admin-configured cloud baseline from scratch (see
+              useDemoCloudBaseline.ts). Kept as one shared handler with real
+              pilots' storage-clearing reset since the end result (confirm,
+              then reload to a clean starting state) is the same either way. */}
           <button
             onClick={() => {
               const isDemo = isDemoPilot(PILOT_SLUG);

@@ -10,9 +10,9 @@ import { AiBadge } from './AiBadge';
 import { COLOR_PALETTE } from '../colorPalette';
 import { forecastForName } from '../forecast';
 import { suggestMarkup } from '../markupSuggestions';
-import { CATEGORIES_BY_TENANT, categoryFieldConfig, ADD_ITEM_TEXT_BY_TENANT, SEASON_PRESETS_BY_TENANT } from '../categoryFieldMap';
+import { categoriesForPilot, categoryFieldConfigForPilot, ADD_ITEM_TEXT_BY_TENANT, SEASON_PRESETS_BY_TENANT } from '../categoryFieldMap';
 import { recordCategoryCorrection } from '../categoryLearning';
-import { TENANT } from '../config';
+import { TENANT, PILOT_SLUG } from '../config';
 import { useSpeechToText } from '../useSpeechToText';
 import { useLanguage } from '../useLanguage';
 import { vatPortionOfPrice } from '../vat';
@@ -157,7 +157,7 @@ export function AddSheet({
   const [copyLang, setCopyLang] = useState<Lang>(lang);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cardFileInputRef = useRef<HTMLInputElement>(null);
-  const tenantCategories = CATEGORIES_BY_TENANT[TENANT];
+  const tenantCategories = categoriesForPilot(PILOT_SLUG, TENANT);
   const addItemText = ADD_ITEM_TEXT_BY_TENANT[TENANT];
 
   const speech = useSpeechToText((transcript) => {
@@ -1192,11 +1192,11 @@ export function AddSheet({
                   </select>
                 </Field>
 
-                <Field label={categoryFieldConfig(draft.category).environmentLabel}>
+                <Field label={categoryFieldConfigForPilot(PILOT_SLUG, draft.category).environmentLabel}>
                   <input
                     value={draft.environment ?? ''}
                     onChange={(e) => setDraft({ ...draft, environment: e.target.value })}
-                    placeholder={categoryFieldConfig(draft.category).environmentPlaceholder}
+                    placeholder={categoryFieldConfigForPilot(PILOT_SLUG, draft.category).environmentPlaceholder}
                     className="input"
                   />
                 </Field>

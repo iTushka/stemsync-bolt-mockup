@@ -1,19 +1,31 @@
 import { useState, useEffect } from 'react';
-import { STORAGE_PREFIX, TENANT, PILOT_SLUG } from './config';
+import { STORAGE_PREFIX, TENANT, PILOT_SLUG, isDemoPilot } from './config';
 
 /**
  * Drop-in replacement for useState that also persists to localStorage,
  * namespaced per tenant (see config.ts). If reading or writing fails for
  * any reason (private browsing, storage full, first load) it silently
  * falls back to plain in-memory state rather than breaking the app.
+ *
+ * Demo pilots (demo-fashion/demo-craft/demo-food) are the one exception:
+ * per the "cloud baseline, no session persistence" design, everything a
+ * demo session does lives only in React state for as long as the tab is
+ * open — never written to localStorage, so a reload always starts clean
+ * from the current admin-configured cloud baseline (see App.tsx,
+ * fetchDemoBaseline.ts). This hook enforces that centrally rather than
+ * per call-site, so every existing usePersistentState('key', ...) call in
+ * the app automatically behaves correctly for demo pilots with no changes
+ * needed at each call site.
  */
 export function usePersistentState<T>(
   key: string,
   initial: T
 ): [T, React.Dispatch<React.SetStateAction<T>>] {
   const storageKey = `${STORAGE_PREFIX}:${key}`;
+  const persistToStorage = !isDemoPilot(PILOT_SLUG);
 
   const [state, setState] = useState<T>(() => {
+    if (!persistToStorage) return initial;
     try {
       const raw = localStorage.getItem(storageKey);
       return raw !== null ? (JSON.parse(raw) as T) : initial;
@@ -23,12 +35,13 @@ export function usePersistentState<T>(
   });
 
   useEffect(() => {
+    if (!persistToStorage) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify(state));
     } catch {
       // Storage unavailable or full — the session still works in memory.
     }
-  }, [state, storageKey]);
+  }, [state, storageKey, persistToStorage]);
 
   return [state, setState];
 }

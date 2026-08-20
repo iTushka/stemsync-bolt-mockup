@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { usePersistentState } from './usePersistentState';
-import { DEFAULT_CURRENCY, PILOT_SLUG } from './config';
+import { DEFAULT_CURRENCY, PILOT_SLUG, isDemoPilot } from './config';
 import { DEMO_SEEDS } from './demoSeeds';
+import { useDemoCloudBaseline } from './useDemoCloudBaseline';
 import { DemoDataBanner } from './components/DemoDataBanner';
 import { StockList } from './components/StockList';
 import { FilterSheet } from './components/FilterSheet';
@@ -79,6 +80,14 @@ function App() {
   );
   const [businessProfileOpen, setBusinessProfileOpen] = useState(false);
 
+  // Demo pilots (demo-fashion/demo-craft/demo-food) replace their
+  // hardcoded demoSeeds.ts content with an admin-configured cloud baseline
+  // fetched fresh on every load — see useDemoCloudBaseline.ts. A no-op for
+  // every real pilot. Falls back to demoSeeds.ts if the cloud project
+  // isn't configured yet or a fetch/cache both fail, so a demo never
+  // renders fully empty.
+  const demoCloud = useDemoCloudBaseline();
+
   const [items, setItems] = usePersistentState<StockItem[]>('items', demoSeed?.items ?? []);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<Filters>(emptyFilters);
@@ -114,6 +123,13 @@ function App() {
   const [team, setTeam] = usePersistentState<TeamUser[]>('team', [
     { id: 'owner', name: 'You', role: 'Owner' },
   ]);
+
+  useEffect(() => {
+    if (demoCloud.status !== 'ready' || !demoCloud.baseline) return;
+    setItems(demoCloud.baseline.items);
+    setSettings((prev) => ({ ...prev, currencySymbol: demoCloud.baseline!.currency }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoCloud.status]);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Who's currently using the app on this device — see
@@ -539,6 +555,14 @@ function App() {
     );
     setTab('sell');
   };
+
+  if (isDemoPilot(PILOT_SLUG) && demoCloud.status === 'loading') {
+    return (
+      <div className="max-w-[640px] mx-auto min-h-screen bg-cream-50 flex items-center justify-center">
+        <p className="text-sm text-stone-400">Loading demo…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-[640px] mx-auto min-h-screen bg-cream-50 relative flex flex-col">

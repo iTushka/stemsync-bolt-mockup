@@ -1,8 +1,8 @@
 import type { StockItem, Category, SalesChannel } from './types';
 import { totalUnitsFromBatch, unitCostFromBatch } from './batchPricing';
 import { suggestCategoryFromLearning } from './categoryLearning';
-import { CATEGORY_KEYWORDS_BY_TENANT } from './categoryFieldMap';
-import { TENANT } from './config';
+import { categoryKeywordsForPilot } from './categoryFieldMap';
+import { TENANT, PILOT_SLUG } from './config';
 
 export interface ParsedEntry {
   name?: string;
@@ -286,7 +286,7 @@ export function parseEntry(text: string): ParsedEntry {
       result.category = learned;
     } else {
       const lower = result.name.toLowerCase();
-      const keywordsByCategory = CATEGORY_KEYWORDS_BY_TENANT[TENANT];
+      const keywordsByCategory = categoryKeywordsForPilot(PILOT_SLUG, TENANT);
       for (const [category, keywords] of Object.entries(keywordsByCategory) as [Category, string[]][]) {
         if (keywords.some((keyword) => lower.includes(keyword))) {
           result.category = category;
