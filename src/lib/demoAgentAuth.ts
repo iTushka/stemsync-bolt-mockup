@@ -95,3 +95,20 @@ export async function completePasswordReset(
   if (data?.error) return data.error as string;
   return null;
 }
+
+/** Checks a ?share=<token> link (see docs/demo-share-links.md) — the third,
+ *  account-free way into a demo pilot, for prospects who shouldn't get the
+ *  Basic Auth password or their own agent account. Callable by anon (a
+ *  prospect isn't signed in as anything): validate_demo_share_link() is
+ *  granted to anon explicitly (see supabase/migrations/0004_demo_share_links.sql).
+ *  Any error (bad token format, network failure) is treated as invalid,
+ *  same fail-closed stance as the middleware's own check. */
+export async function validateDemoShareLink(token: string, tenantSlug: string): Promise<boolean> {
+  if (!demoSupabase) return false;
+  const { data, error } = await demoSupabase.rpc('validate_demo_share_link', {
+    p_token: token,
+    p_tenant_slug: tenantSlug,
+  });
+  if (error) return false;
+  return data === true;
+}

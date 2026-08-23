@@ -21,8 +21,13 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.dev.vars
 .claude/
 
 # Supabase CLI's local project-link cache (created by `supabase link` /
 # `supabase functions deploy`) — machine-local state, not shared config.
 supabase/.temp/
+
+# Wrangler's local dev state (created by `wrangler pages dev`, used to
+# exercise functions/_middleware.js locally) — machine-local, not shared.
+.wrangler/
